@@ -1,0 +1,17 @@
+{
+  "id": "2",
+  "time_limit": 1.0,
+  "memory_limit": 32,
+  "checker": "lcmp",
+  "skip": false,
+  "subtasks": [
+    {
+      "full_score": 60,
+      "num_testcases": 3
+    },
+    {
+      "full_score": 40,
+      "num_testcases": 2
+    }
+  ]
+}
