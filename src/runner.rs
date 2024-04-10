@@ -25,6 +25,7 @@ pub async fn run(
         ext: language_config.ext,
         compile_script: language_config.compile,
         run_script: language_config.run,
+        checker: task_config.checker,
     };
 
     isolate.init().await?;

@@ -31,6 +31,7 @@ pub struct Isolate {
     pub ext: String,
     pub compile_script: String,
     pub run_script: String,
+    pub checker: String,
 }
 
 #[derive(Default, PartialEq, Debug)]
@@ -98,7 +99,7 @@ impl Isolate {
         let current_dir = env::current_dir()?;
         let checker_dir = current_dir.join("checker");
 
-        let result = Command::new(format!("{}/lcmp", checker_dir.display()))
+        let result = Command::new(format!("{}/{}", checker_dir.display(), self.checker))
             .arg(format!("{}/{}.in", self.box_path.display(), test_index))
             .arg(format!("{}/out.out", self.box_path.display()))
             .arg(format!("{}/{}.sol", self.box_path.display(), test_index))
