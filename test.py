@@ -5,8 +5,8 @@ import datetime
 
 def send_request(url, counter):
     json_data = {
-        "id": counter,
-        "user_id": "String",
+        "task_id": "2",
+        "submission_id": counter,
         # "code": "#include <bits/stdc++.h>\nusing namespace std;\nint fib(int n)\n {\nif (n <= 2) return 1;\nreturn fib(n-1)+fib(n-2);\n}\nint main() {\ncout<<fib(42)*fib(41);\n}",
         "code": "#include <bits/stdc++.h>\nusing namespace std;\nlong dp[20000000];\nint main() {\nint a, b;\ncin >> a >> b;\ncout << a+b << endl;\nfor(int i = 0; i < 20000000; i++) dp[i] = 1; while(true);\n}",
         "language": "cpp"
