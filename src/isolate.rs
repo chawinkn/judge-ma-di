@@ -1,4 +1,4 @@
-use std::{ fs, path::PathBuf, str::from_utf8 };
+use std::{ fs::{ self, File }, io::Write, path::PathBuf, str::from_utf8 };
 use tokio::process::Command;
 use std::env;
 use anyhow::Result;
@@ -26,8 +26,8 @@ pub struct Isolate {
     pub box_id: u64,
     pub time_limit: f64,
     pub memory_limit: u64,
-    pub input_path: PathBuf,
     pub task_id: String,
+    pub code: String,
     pub ext: String,
     pub compile_script: String,
     pub run_script: String,
@@ -53,9 +53,9 @@ impl Isolate {
         self.box_path = PathBuf::from(box_path.trim()).join("box");
 
         let current_dir = env::current_dir()?;
-        let source_path = current_dir.join("temp").join(&self.input_path);
         let destination_path = self.box_path.join(format!("source.{}", self.ext));
-        fs::copy(&source_path, &destination_path)?;
+        let mut file = File::create(destination_path)?;
+        file.write_all(self.code.as_bytes())?;
 
         let input_path = current_dir.join("tasks").join(&self.task_id).join("testcases");
 
@@ -95,7 +95,7 @@ impl Isolate {
         Ok(result)
     }
 
-    pub async fn check(&mut self, test_index: i32) -> Result<bool> {
+    pub async fn check(&mut self, test_index: u64) -> Result<bool> {
         let current_dir = env::current_dir()?;
         let checker_dir = current_dir.join("checker");
 
@@ -110,7 +110,7 @@ impl Isolate {
         Ok(stdout == "Correct\n100\n".to_string())
     }
 
-    pub async fn run(&mut self, test_index: i32) -> Result<IsolateResult> {
+    pub async fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
         let run_script = self.run_script.replace("{source}", "source");
         let split: Vec<&str> = run_script.split(' ').collect();
 

@@ -1,8 +1,14 @@
-use std::{ sync::Arc, process::exit };
+use std::{ sync::Arc, process::exit, time::Duration };
 use axum::{ routing::{ get, post }, Router };
 use lapin::Channel;
 use tokio::spawn;
 use log::{ info, warn };
+use tokio::time::sleep;
+use tokio_postgres::Client;
+use dotenv::dotenv;
+use postgres_openssl::MakeTlsConnector;
+use openssl::ssl::{ SslConnector, SslMethod };
+use tower_http::cors::{ Any, CorsLayer };
 
 use crate::helper::get_judge_config;
 pub mod routes;
@@ -17,16 +23,59 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
+
     tracing_subscriber::fmt::init();
 
     info!(" Starting...");
 
-    let consumer_channel = rbmq::get_channel().await.expect("Unable to create RabbitMQ channel");
-    let shared_state = Arc::new(AppState { channel: consumer_channel.clone() });
+    let postgres_url = std::env::var("POSTGRES_URL").expect("POSTGRES_URL not found");
 
-    rbmq::create_queue(consumer_channel.clone(), "queue".to_string()).await.expect(
-        "Unable to create RabbitMQ queue"
-    );
+    let builder = SslConnector::builder(SslMethod::tls()).unwrap();
+    let mut connector = MakeTlsConnector::new(builder.build());
+    connector.set_callback(|config, _| {
+        config.set_verify_hostname(false);
+        Ok(())
+    });
+
+    let (pg_client, connection) = tokio_postgres
+        ::connect(&postgres_url, connector).await
+        .expect("Unable to connect to PostgreSQL");
+    let client: Arc<Client> = Arc::new(pg_client);
+
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            panic!("Error connecting to PostgreSQL: {}", e);
+        }
+    });
+
+    let consumer_channel = loop {
+        match rbmq::get_channel().await {
+            Ok(channel) => {
+                break channel;
+            }
+            Err(err) => {
+                warn!("Failed to create RabbitMQ channel: {:?}", err);
+                sleep(Duration::from_secs(5)).await;
+            }
+        }
+    };
+
+    let shared_state = Arc::new(AppState {
+        channel: consumer_channel.clone(),
+    });
+
+    loop {
+        match rbmq::create_queue(consumer_channel.clone(), "queue".to_string()).await {
+            Ok(_) => {
+                break;
+            }
+            Err(err) => {
+                warn!("Failed to create RabbitMQ queue: {:?}", err);
+                sleep(Duration::from_secs(5)).await;
+            }
+        }
+    }
 
     let judge_config = get_judge_config().unwrap();
     let max_concurrent_workers = judge_config.max_worker;
@@ -35,13 +84,14 @@ async fn main() {
 
     for i in 0..max_concurrent_workers {
         let channel = consumer_channel.clone();
+        let db_client = client.clone();
         let join_handle = spawn(async move {
             rbmq::create_consumer(
                 channel,
+                db_client,
                 "queue".to_string(),
-                i,
                 format!("consumer {}", i)
-            ).await.expect("Unable to create RabbitMQ consumer {}");
+            ).await.expect("Unable to create RabbitMQ consumer");
         });
         join_handles.push(join_handle);
     }
@@ -51,6 +101,10 @@ async fn main() {
             let _ = handle.await;
         }
     });
+
+    let origins = ["http://localhost:3000".parse().unwrap()];
+
+    let cors = CorsLayer::new().allow_headers(Any).allow_methods(Any).allow_origin(origins);
 
     let app = Router::new()
         .route(
@@ -63,9 +117,10 @@ async fn main() {
                 let shared_state = Arc::clone(&shared_state);
                 move |body| routes::submission::create_submission(body, shared_state)
             })
-        );
+        )
+        .layer(cors);
 
-    let port = "0.0.0.0:3000";
+    let port = "0.0.0.0:5000";
     let listener = tokio::net::TcpListener::bind(port).await.unwrap();
 
     let api_handler = spawn(async move { axum::serve(listener, app).await.unwrap() });

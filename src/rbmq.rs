@@ -1,5 +1,3 @@
-use std::{ env, fs };
-
 use lapin::{
     options::{ BasicAckOptions, BasicConsumeOptions, BasicPublishOptions, QueueDeclareOptions },
     types::FieldTable,
@@ -11,13 +9,16 @@ use lapin::{
 use futures::StreamExt;
 use log::{ info, warn };
 use serde::{ Deserialize, Serialize };
-use crate::{ helper::get_language_config, runner::run };
+use tokio_postgres::Client;
+use crate::runner::run;
 use anyhow::Result;
+use crate::Arc;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Payload {
     task_id: String,
     submission_id: u64,
+    code: String,
     language: String,
 }
 
@@ -34,6 +35,7 @@ pub async fn publish_message(
     routing_key: String,
     task_id: String,
     submission_id: u64,
+    code: String,
     language: String
 ) -> Result<()> {
     info!(" [x] Sent to {:?} {:?}", routing_key, submission_id);
@@ -41,6 +43,7 @@ pub async fn publish_message(
     let submission_payload = Payload {
         task_id,
         submission_id,
+        code,
         language,
     };
     let payload = serde_json::to_string(&submission_payload)?;
@@ -70,8 +73,8 @@ pub async fn create_queue(channel: Channel, queue_name: String) -> Result<()> {
 
 pub async fn create_consumer(
     channel: Channel,
+    db_client: Arc<Client>,
     queue_name: String,
-    consumer_id: u64,
     consumer_tag: String
 ) -> Result<()> {
     info!(" [x] Created consumer {:?}", consumer_tag);
@@ -92,15 +95,41 @@ pub async fn create_consumer(
             let task_id = payload.task_id;
             let submission_id = payload.submission_id;
             let language = payload.language;
-            let language_config = get_language_config(&language).unwrap();
-            let result = run(consumer_id, task_id, submission_id, language).await;
+            let code = payload.code;
+
+            let row = db_client.query_opt(
+                "SELECT id FROM submission WHERE id = $1",
+                &[&(submission_id as i32)]
+            ).await?;
+
+            if row.is_none() {
+                warn!(" [x] Submission ID {} not found", submission_id);
+                delivery.ack(BasicAckOptions::default()).await?;
+                continue;
+            }
+
+            db_client.query_opt(
+                "UPDATE submission SET status = $1 WHERE id = $2",
+                &[&"Judging", &(submission_id as i32)]
+            ).await?;
+
+            let result = run(task_id, submission_id, code, language).await;
+
             match result {
-                Ok(_) => {
-                    let current_dir = env::current_dir()?;
-                    let destination_path = current_dir
-                        .join("temp")
-                        .join(format!("{}.{}", submission_id, language_config.ext));
-                    fs::remove_file(destination_path)?;
+                Ok(judge_result) => {
+                    info!(" [x] {} Finished", submission_id);
+                    let data = serde_json::to_value(&judge_result.result).unwrap();
+                    db_client.query_opt(
+                        "UPDATE submission SET status = $1, score = $2, time = $3, memory = $4, result = $5 WHERE id = $6",
+                        &[
+                            &judge_result.status,
+                            &(judge_result.score as i32),
+                            &(judge_result.time as i32),
+                            &(judge_result.memory as i32),
+                            &data,
+                            &(submission_id as i32),
+                        ]
+                    ).await?;
                 }
                 Err(_err) => {
                     warn!(" [x] {} {}", submission_id, _err);

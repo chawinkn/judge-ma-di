@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::{ self, create_dir, File };
-use std::io::Write;
+use std::fs;
 use std::env;
 use anyhow::Result;
 
@@ -32,6 +31,8 @@ pub struct TaskConfig {
     pub memory_limit: u64,
     pub checker: String,
     pub skip: bool,
+    pub full_score: u64,
+    pub num_testcases: u64,
     pub subtasks: Vec<Subtask>,
 }
 
@@ -39,29 +40,6 @@ pub struct TaskConfig {
 pub struct Subtask {
     pub full_score: u64,
     pub num_testcases: u64,
-}
-
-pub fn write_file(name: &str, content: &str, language: &str, path: &str) -> std::io::Result<()> {
-    let language_config = match get_language_config(language) {
-        Ok(ext) => ext,
-        Err(err) => {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{}", err)));
-        }
-    };
-
-    let current_dir = env::current_dir()?;
-    let destination_path = current_dir.join(path).join(format!("{}.{}", name, language_config.ext));
-
-    if let Some(parent_dir) = destination_path.parent() {
-        if !parent_dir.exists() {
-            create_dir(parent_dir)?;
-        }
-    }
-
-    let mut file = File::create(destination_path)?;
-    file.write_all(content.as_bytes())?;
-
-    Ok(())
 }
 
 pub fn get_config() -> Result<Config> {

@@ -17,6 +17,6 @@
     }
   },
   "judge": {
-    "max_worker": 10
+    "max_worker": 2
   }
 }

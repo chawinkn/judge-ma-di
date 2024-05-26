@@ -4,3 +4,4 @@
 /testlib
 /temp
 .vscode
+.env
