@@ -1,10 +1,10 @@
 use std::{ sync::Arc, process::exit, time::Duration };
-use axum::{ routing::{ get, post }, Router };
+use axum::{ extract::multipart, routing::{ delete, get, post }, Router };
 use lapin::Channel;
-use tokio::spawn;
+use tokio::{ spawn, time::interval };
 use log::{ info, warn };
 use tokio::time::sleep;
-use tokio_postgres::Client;
+use tokio_postgres::{ Client, Config };
 use dotenv::dotenv;
 use postgres_openssl::MakeTlsConnector;
 use openssl::ssl::{ SslConnector, SslMethod };
@@ -46,6 +46,17 @@ async fn main() {
     tokio::spawn(async move {
         if let Err(e) = connection.await {
             panic!("Error connecting to PostgreSQL: {}", e);
+        }
+    });
+
+    let db_client = client.clone();
+    tokio::spawn(async move {
+        let mut interval = interval(Duration::from_secs(300));
+        loop {
+            interval.tick().await;
+            if let Err(e) = db_client.simple_query("SELECT 1").await {
+                warn!("Failed to execute heartbeat query: {:?}", e);
+            }
         }
     });
 
@@ -102,9 +113,9 @@ async fn main() {
         }
     });
 
-    let origins = ["http://localhost:3000".parse().unwrap()];
+    // let origins = ["http://localhost:3000".parse().unwrap()];
 
-    let cors = CorsLayer::new().allow_headers(Any).allow_methods(Any).allow_origin(origins);
+    let cors = CorsLayer::new().allow_headers(Any).allow_methods(Any).allow_origin(Any);
 
     let app = Router::new()
         .route(
@@ -116,6 +127,22 @@ async fn main() {
             post({
                 let shared_state = Arc::clone(&shared_state);
                 move |body| routes::submission::create_submission(body, shared_state)
+            })
+        )
+        .route(
+            "/task/:id",
+            get({
+                let shared_state = Arc::clone(&shared_state);
+                move |path| routes::task::get_task(path, shared_state)
+            })
+        )
+        .route("/task/:id", post(routes::task::create_task))
+        .route("/task/:id", delete(routes::task::delete_task))
+        .route(
+            "/desc/:id",
+            get({
+                let shared_state = Arc::clone(&shared_state);
+                move |path| routes::desc::get_desc(path, shared_state)
             })
         )
         .layer(cors);

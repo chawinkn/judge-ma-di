@@ -24,9 +24,8 @@ pub struct JudgeConfig {
     pub max_worker: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TaskConfig {
-    pub id: String,
     pub time_limit: f64,
     pub memory_limit: u64,
     pub checker: String,
@@ -36,7 +35,7 @@ pub struct TaskConfig {
     pub subtasks: Vec<Subtask>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Subtask {
     pub full_score: u64,
     pub num_testcases: u64,

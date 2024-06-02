@@ -6,7 +6,7 @@ blue=$(tput setaf 4)
 normal=$(tput sgr0)
 
 sudo apt-get update
-sudo apt-get install libcap-dev asciidoc-base
+sudo apt-get install libcap-dev libsystemd-dev libssl-dev asciidoc-base
 
 git clone "https://github.com/ioi/isolate"
 git clone "https://github.com/programming-in-th/testlib"

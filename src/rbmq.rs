@@ -23,7 +23,7 @@ pub struct Payload {
 }
 
 pub async fn get_channel() -> Result<Channel> {
-    let addr = "amqp://root:root@127.0.0.1:5672";
+    let addr = "amqp://root:root@localhost:5672";
     let conn = Connection::connect(addr, ConnectionProperties::default()).await?;
     let channel = conn.create_channel().await?;
 

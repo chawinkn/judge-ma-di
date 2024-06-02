@@ -2,6 +2,7 @@ version: "3"
 
 services:
   rabbitmq:
+    container_name: rabbitmq
     image: rabbitmq:management-alpine
     tty: true
     volumes:
@@ -12,6 +13,15 @@ services:
     ports:
       - "15672:15672"
       - "5672:5672"
+
+  # judge-ma-di:
+  #   container_name: judge-ma-di
+  #   build:
+  #     dockerfile: dockerfile
+  #     args:
+  #       POSTGRES_URL: postgres://default:3gDyWUbe0mZR@ep-steep-flower-a1w69dji-pooler.ap-southeast-1.aws.neon.tech:5432/verceldb?sslmode=require
+  #   ports:
+  #     - 5000:5000
 
   # postgres:
   #   image: postgres:latest
