@@ -1,16 +1,15 @@
 use std::{ sync::Arc, process::exit, time::Duration };
-use axum::{ extract::multipart, routing::{ delete, get, post }, Router };
+use axum::{ extract::DefaultBodyLimit, routing::{ delete, get, post }, Router };
 use lapin::Channel;
 use tokio::{ spawn, time::interval };
 use log::{ info, warn };
 use tokio::time::sleep;
-use tokio_postgres::{ Client, Config };
+use tokio_postgres::Client;
 use dotenv::dotenv;
 use postgres_openssl::MakeTlsConnector;
 use openssl::ssl::{ SslConnector, SslMethod };
 use tower_http::cors::{ Any, CorsLayer };
 
-use crate::helper::get_judge_config;
 pub mod routes;
 pub mod helper;
 pub mod rbmq;
@@ -45,13 +44,13 @@ async fn main() {
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            panic!("Error connecting to PostgreSQL: {}", e);
+            warn!("Error connecting to PostgreSQL: {}", e);
         }
     });
 
     let db_client = client.clone();
     tokio::spawn(async move {
-        let mut interval = interval(Duration::from_secs(300));
+        let mut interval = interval(Duration::from_secs(240));
         loop {
             interval.tick().await;
             if let Err(e) = db_client.simple_query("SELECT 1").await {
@@ -88,12 +87,18 @@ async fn main() {
         }
     }
 
-    let judge_config = get_judge_config().unwrap();
-    let max_concurrent_workers = judge_config.max_worker;
+    let max_worker_env = std::env::var("MAX_WORKER").expect("MAX_WORKER not found");
+    let max_worker = match max_worker_env.parse::<i32>() {
+        Ok(num) => num,
+        Err(_) => {
+            warn!("MAX_WORKER must be integer");
+            0
+        }
+    };
 
     let mut join_handles = Vec::new();
 
-    for i in 0..max_concurrent_workers {
+    for i in 0..max_worker {
         let channel = consumer_channel.clone();
         let db_client = client.clone();
         let join_handle = spawn(async move {
@@ -113,36 +118,41 @@ async fn main() {
         }
     });
 
-    // let origins = ["http://localhost:3000".parse().unwrap()];
+    let allow_origin = std::env::var("ALLOW_ORIGIN").expect("ALLOW_ORIGIN not found");
+    let origins = [allow_origin.parse().unwrap()];
 
-    let cors = CorsLayer::new().allow_headers(Any).allow_methods(Any).allow_origin(Any);
+    let cors = CorsLayer::new().allow_headers(Any).allow_methods(Any).allow_origin(origins);
 
     let app = Router::new()
+        .route("/api/healthchecker", get(routes::healthchecker::health_checker))
         .route(
-            "/",
-            get(|| async { "OK" })
-        )
-        .route(
-            "/submit",
+            "/api/submit",
             post({
                 let shared_state = Arc::clone(&shared_state);
                 move |body| routes::submission::create_submission(body, shared_state)
             })
         )
         .route(
-            "/task/:id",
+            "/api/task/:id",
             get({
                 let shared_state = Arc::clone(&shared_state);
-                move |path| routes::task::get_task(path, shared_state)
+                move |path| routes::task::get_task_testcases(path, shared_state)
             })
         )
-        .route("/task/:id", post(routes::task::create_task))
-        .route("/task/:id", delete(routes::task::delete_task))
+        .route("/api/task/:id", post(routes::task::upload_task).layer(DefaultBodyLimit::max(1024 * 1000 * 10)))
+        .route("/api/task/:id", delete(routes::task::delete_task))
         .route(
-            "/desc/:id",
+            "/api/desc/:id",
             get({
                 let shared_state = Arc::clone(&shared_state);
                 move |path| routes::desc::get_desc(path, shared_state)
+            })
+        )
+        .route(
+            "/api/manifest/:id",
+            get({
+                let shared_state = Arc::clone(&shared_state);
+                move |path| routes::manifest::get_manifest(path, shared_state)
             })
         )
         .layer(cors);

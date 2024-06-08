@@ -97,6 +97,8 @@ pub async fn create_consumer(
             let language = payload.language;
             let code = payload.code;
 
+            info!(" [*] Judging {}", submission_id);
+
             let row = db_client.query_opt(
                 "SELECT id FROM submission WHERE id = $1",
                 &[&(submission_id as i32)]
@@ -133,9 +135,13 @@ pub async fn create_consumer(
                 }
                 Err(_err) => {
                     warn!(" [x] {} {}", submission_id, _err);
+                    db_client.query_opt(
+                        "UPDATE submission SET status = 'Judge Error' WHERE id = $1",
+                        &[&(submission_id as i32)]
+                    ).await?;
                 }
             }
-            delivery.ack(BasicAckOptions::default()).await.expect("basic_ack");
+            delivery.ack(BasicAckOptions::default()).await?;
         }
     }
 

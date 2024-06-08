@@ -19,7 +19,7 @@ services:
   #   build:
   #     dockerfile: dockerfile
   #     args:
-  #       POSTGRES_URL: postgres://default:3gDyWUbe0mZR@ep-steep-flower-a1w69dji-pooler.ap-southeast-1.aws.neon.tech:5432/verceldb?sslmode=require
+  #       POSTGRES_URL:
   #   ports:
   #     - 5000:5000
 

@@ -1,4 +1,4 @@
-use std::{ env, fs, path::PathBuf, cmp };
+use std::{ fs, path::PathBuf, cmp };
 use log::info;
 use anyhow::Result;
 
@@ -73,128 +73,137 @@ pub async fn run(
         memory: 0,
     };
     let mut run_result: Vec<RunResult> = vec![];
+    let mut is_error: bool = false;
+    let task_path = format!("tasks/{}/testcases", task_id);
+
+    for i in 1..=task_config.num_testcases {
+        let input_file = format!("{}/{}.in", task_path, i);
+        let output_file = format!("{}/{}.sol", task_path, i);
+
+        if !fs::metadata(&input_file).is_ok() || !fs::metadata(&output_file).is_ok() {
+            judge_result.status = "Testcases Error".to_string();
+            is_error = true;
+            break;
+        }
+    }
 
     isolate.init().await?;
 
-    let compile_result = isolate.compile().await?;
+    if !is_error {
+        let compile_result = isolate.compile().await?;
 
-    let mut score;
+        let mut score;
 
-    let current_dir = env::current_dir()?;
-    let task_path = current_dir.join("tasks").join(task_id).join("testcases");
-    if compile_result.status == RunVerdict::CompilationError {
-        judge_result.status = "Compilation Error".to_string();
-    } else {
-        let subtasks = task_config.subtasks;
-        let use_skip = task_config.skip;
-        let mut test_index = 1;
-        if subtasks.len() == 0 {
-            for entry in fs::read_dir(task_path)? {
-                let entry = entry?;
-                let path = entry.path();
-
-                let ext = path.extension().unwrap();
-                if ext != "in" {
-                    continue;
-                }
-                score = task_config.full_score / task_config.num_testcases;
-                let isolate_result = isolate.run(test_index).await?;
-                let mut correct = true;
-                if isolate_result.status == RunVerdict::VerdictOK {
-                    let checker_result = isolate.check(test_index).await?;
-                    if !checker_result {
-                        score = 0;
-                        correct = false;
-                    }
-                } else {
-                    score = 0;
-                }
-                let mut status = get_status(isolate_result.status);
-                if !correct {
-                    status = "Wrong Answer".to_string();
-                }
-                judge_result.score += score;
-                judge_result.memory = cmp::max(judge_result.memory, isolate_result.memory_usage);
-                judge_result.time = cmp::max(
-                    judge_result.time,
-                    (isolate_result.time_usage * 1000.0) as u64
-                );
-                run_result.push(RunResult {
-                    status,
-                    test_index,
-                    subtask_index: 0,
-                    score,
-                    time: isolate_result.time_usage,
-                    memory: isolate_result.memory_usage,
-                });
-                test_index += 1;
-            }
+        if compile_result.status == RunVerdict::CompilationError {
+            judge_result.status = "Compilation Error".to_string();
         } else {
-            let mut subtask_index = 1;
-            let mut subtask_result: Vec<RunResult> = vec![];
-            for subtask in subtasks {
-                let mut correct_all = true;
-                let mut skipped = false;
-
-                for _i in 0..subtask.num_testcases {
-                    if use_skip && skipped {
-                        subtask_result.push(RunResult {
-                            status: "Skipped".to_string(),
-                            test_index,
-                            subtask_index,
-                            score: 0,
-                            time: 0.0,
-                            memory: 0,
-                        });
-                    } else {
-                        let isolate_result = isolate.run(test_index).await?;
-                        let mut correct = true;
-                        score = subtask.full_score / subtask.num_testcases;
-                        if isolate_result.status == RunVerdict::VerdictOK {
-                            let checker_result = isolate.check(test_index).await?;
-                            if !checker_result {
-                                correct_all = false;
-                                skipped = true;
-                                correct = false;
-                                score = 0;
-                            }
-                        } else {
-                            correct_all = false;
-                            skipped = true;
+            let subtasks = task_config.subtasks;
+            let use_skip = task_config.skip;
+            let mut test_index = 1;
+            if subtasks.len() == 0 {
+                for _i in 1..=task_config.num_testcases {
+                    score = task_config.full_score / task_config.num_testcases;
+                    let isolate_result = isolate.run(test_index).await?;
+                    let mut correct = true;
+                    if isolate_result.status == RunVerdict::VerdictOK {
+                        let checker_result = isolate.check(test_index).await?;
+                        if !checker_result {
                             score = 0;
+                            correct = false;
                         }
-                        let mut status = get_status(isolate_result.status);
-                        if !correct {
-                            status = "Wrong Answer".to_string();
-                        }
-                        judge_result.memory = cmp::max(
-                            judge_result.memory,
-                            isolate_result.memory_usage
-                        );
-                        judge_result.time = cmp::max(
-                            judge_result.time,
-                            (isolate_result.time_usage * 1000.0) as u64
-                        );
-                        subtask_result.push(RunResult {
-                            status,
-                            test_index,
-                            subtask_index,
-                            score,
-                            time: isolate_result.time_usage,
-                            memory: isolate_result.memory_usage,
-                        });
+                    } else {
+                        score = 0;
                     }
+                    let mut status = get_status(isolate_result.status);
+                    if !correct {
+                        status = "Wrong Answer".to_string();
+                    }
+                    judge_result.score += score;
+                    judge_result.memory = cmp::max(
+                        judge_result.memory,
+                        isolate_result.memory_usage
+                    );
+                    judge_result.time = cmp::max(
+                        judge_result.time,
+                        (isolate_result.time_usage * 1000.0) as u64
+                    );
+                    run_result.push(RunResult {
+                        status,
+                        test_index,
+                        subtask_index: 0,
+                        score,
+                        time: isolate_result.time_usage,
+                        memory: isolate_result.memory_usage,
+                    });
                     test_index += 1;
                 }
-                if !correct_all {
-                    for subtask_result in &mut subtask_result {
-                        subtask_result.score = 0;
+            } else {
+                let mut subtask_index = 1;
+                let mut subtask_result: Vec<RunResult> = vec![];
+                for subtask in subtasks {
+                    let mut correct_all = true;
+                    let mut skipped = false;
+
+                    for _i in 0..subtask.num_testcases {
+                        if use_skip && skipped {
+                            subtask_result.push(RunResult {
+                                status: "Skipped".to_string(),
+                                test_index,
+                                subtask_index,
+                                score: 0,
+                                time: 0.0,
+                                memory: 0,
+                            });
+                        } else {
+                            let isolate_result = isolate.run(test_index).await?;
+                            let mut correct = true;
+                            score = subtask.full_score / subtask.num_testcases;
+                            if isolate_result.status == RunVerdict::VerdictOK {
+                                let checker_result = isolate.check(test_index).await?;
+                                if !checker_result {
+                                    correct_all = false;
+                                    skipped = true;
+                                    correct = false;
+                                    score = 0;
+                                }
+                            } else {
+                                correct_all = false;
+                                skipped = true;
+                                score = 0;
+                            }
+                            let mut status = get_status(isolate_result.status);
+                            if !correct {
+                                status = "Wrong Answer".to_string();
+                            }
+                            judge_result.memory = cmp::max(
+                                judge_result.memory,
+                                isolate_result.memory_usage
+                            );
+                            judge_result.time = cmp::max(
+                                judge_result.time,
+                                (isolate_result.time_usage * 1000.0) as u64
+                            );
+                            subtask_result.push(RunResult {
+                                status,
+                                test_index,
+                                subtask_index,
+                                score,
+                                time: isolate_result.time_usage,
+                                memory: isolate_result.memory_usage,
+                            });
+                        }
+                        test_index += 1;
                     }
-                } else {
-                    judge_result.score += subtask.full_score;
+                    if !correct_all {
+                        for subtask_result in &mut subtask_result {
+                            subtask_result.score = 0;
+                        }
+                    } else {
+                        judge_result.score += subtask.full_score;
+                    }
+                    run_result.append(&mut subtask_result);
+                    subtask_index += 1;
                 }
-                run_result.append(&mut subtask_result);
-                subtask_index += 1;
             }
         }
     }

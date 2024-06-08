@@ -16,12 +16,6 @@ pub struct LanguageConfig {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
     pub language: HashMap<String, LanguageConfig>,
-    pub judge: JudgeConfig,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct JudgeConfig {
-    pub max_worker: u64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -48,13 +42,6 @@ pub fn get_config() -> Result<Config> {
     let config = serde_json::from_str(&config_data)?;
 
     Ok(config)
-}
-
-pub fn get_judge_config() -> Result<JudgeConfig> {
-    let config = get_config()?;
-    let judge_config = config.judge;
-
-    Ok(judge_config)
 }
 
 pub fn get_language_config(language: &str) -> Result<LanguageConfig, Box<dyn Error>> {
