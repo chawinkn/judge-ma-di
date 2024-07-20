@@ -1,29 +1,53 @@
-# Currently Kaboom
+FROM rust:1.69-buster as builder
 
-# FROM ubuntu:latest
+WORKDIR /app
 
-# RUN apt update
-# RUN apt install apt
-# RUN apk update && apk add python3 gcc g++
-# RUN apk add --update --no-cache git make libcap-dev asciidoc
+COPY . .
 
-# RUN git clone https://github.com/ioi/isolate.git
+RUN cargo build --release
 
-# WORKDIR /usr/src/app/isolate
+FROM ubuntu:22.04
 
-# RUN make && make install
+RUN apt update -y
+RUN apt install wget tar gzip git -y
 
-# FROM rust:1.69
+# Install dependecies and initialize isolate sandbox
+RUN apt install build-essential libssl-dev libcap-dev pkg-config libsystemd-dev python3 -y
 
-# WORKDIR /usr/src/app
+# Isolate cgroup v2
+# RUN wget -P /tmp https://github.com/ioi/isolate/archive/master.tar.gz && tar -xzvf /tmp/master.tar.gz -C / > /dev/null
+# RUN make -C /isolate-master isolate && make -C /isolate-master install
+# ENV PATH="/isolate-master:$PATH"
 
-# ARG POSTGRES_URL
+# Isolate cgroup v1
+RUN wget -P /tmp https://github.com/ioi/isolate/archive/refs/tags/v1.10.1.tar.gz && tar -xzvf /tmp/v1.10.1.tar.gz -C / > /dev/null
+RUN make -C /isolate-1.10.1 isolate && make -C /isolate-1.10.1 install
+ENV PATH="/isolate-1.10.1:$PATH"
 
-# ENV POSTGRES_URL=$POSTGRES_URL
+# Forgor what this is for
+RUN wget http://nz2.archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.22_amd64.deb
+RUN dpkg -i libssl1.1_1.1.1f-1ubuntu2.22_amd64.deb
 
-# COPY . .
+WORKDIR /user/local/bin
 
-# RUN cargo build --release
-# RUN chmod +x setup.sh && ./setup.sh
+COPY --from=builder /app/target/release/judge-ma-di .
 
-# CMD [ "./target/release/judge-ma-di" ]
+# COPY checker /user/local/bin/checker
+
+# COPY tasks /user/local/bin/tasks
+
+COPY config.json /user/local/bin/config.json
+
+COPY checker.sh /user/local/bin/checker.sh
+
+RUN ./checker.sh
+
+EXPOSE 5000
+
+# Install ngrok
+RUN apt-get update && apt-get install -y wget
+RUN wget -q -O - https://ngrok-agent.s3.amazonaws.com/ngrok.asc | tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null && \
+    echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | tee /etc/apt/sources.list.d/ngrok.list && \
+    apt-get update && apt-get install -y ngrok
+
+CMD [ "./judge-ma-di" ]

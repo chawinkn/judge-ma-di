@@ -22,9 +22,8 @@ pub struct Payload {
     language: String,
 }
 
-pub async fn get_channel() -> Result<Channel> {
-    let addr = "amqp://root:root@localhost:5672";
-    let conn = Connection::connect(addr, ConnectionProperties::default()).await?;
+pub async fn get_channel(rmbq_url: &str) -> Result<Channel> {
+    let conn = Connection::connect(rmbq_url, ConnectionProperties::default()).await?;
     let channel = conn.create_channel().await?;
 
     Ok(channel)

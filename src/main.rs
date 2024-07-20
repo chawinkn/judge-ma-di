@@ -45,6 +45,7 @@ async fn main() {
     tokio::spawn(async move {
         if let Err(e) = connection.await {
             warn!("Error connecting to PostgreSQL: {}", e);
+            exit(1);
         }
     });
 
@@ -55,17 +56,28 @@ async fn main() {
             interval.tick().await;
             if let Err(e) = db_client.simple_query("SELECT 1").await {
                 warn!("Failed to execute heartbeat query: {:?}", e);
+                exit(1);
             }
         }
     });
 
+    let rbmq_url = std::env::var("RBMQ_URL").expect("RBMQ_URL not found");
+
+    let max_retries = 5;
+    let mut retries = 0;
+
     let consumer_channel = loop {
-        match rbmq::get_channel().await {
+        match rbmq::get_channel(&rbmq_url).await {
             Ok(channel) => {
                 break channel;
             }
             Err(err) => {
                 warn!("Failed to create RabbitMQ channel: {:?}", err);
+                retries += 1;
+                if retries >= max_retries {
+                    warn!("Reached maximum retry limit. Exiting...");
+                    exit(1);
+                }
                 sleep(Duration::from_secs(5)).await;
             }
         }
@@ -119,7 +131,10 @@ async fn main() {
     });
 
     let allow_origin = std::env::var("ALLOW_ORIGIN").expect("ALLOW_ORIGIN not found");
-    let origins = [allow_origin.parse().unwrap()];
+    let origins: Vec<axum::http::HeaderValue> = allow_origin
+        .split(',')
+        .map(|origin| axum::http::HeaderValue::from_str(origin).expect("Invalid URL"))
+        .collect();
 
     let cors = CorsLayer::new().allow_headers(Any).allow_methods(Any).allow_origin(origins);
 
@@ -139,7 +154,10 @@ async fn main() {
                 move |path| routes::task::get_task_testcases(path, shared_state)
             })
         )
-        .route("/api/task/:id", post(routes::task::upload_task).layer(DefaultBodyLimit::max(1024 * 1000 * 10)))
+        .route(
+            "/api/task/:id",
+            post(routes::task::upload_task).layer(DefaultBodyLimit::max(1024 * 1000 * 10))
+        )
         .route("/api/task/:id", delete(routes::task::delete_task))
         .route(
             "/api/desc/:id",
