@@ -1,5 +1,11 @@
 use std::{ sync::Arc, process::exit, time::Duration };
-use axum::{ extract::DefaultBodyLimit, routing::{ delete, get, post }, Router };
+use axum::{
+    error_handling::HandleErrorLayer,
+    http::StatusCode,
+    extract::DefaultBodyLimit,
+    routing::{ delete, get, post },
+    Router,
+};
 use lapin::Channel;
 use tokio::{ spawn, time::interval };
 use log::{ info, warn };
@@ -9,6 +15,7 @@ use dotenv::dotenv;
 use postgres_openssl::MakeTlsConnector;
 use openssl::ssl::{ SslConnector, SslMethod };
 use tower_http::cors::{ Any, CorsLayer };
+use axum_token_auth::{ AuthConfig, TokenConfig };
 
 pub mod routes;
 pub mod helper;
@@ -20,6 +27,13 @@ pub struct AppState {
     channel: Channel,
 }
 
+async fn handle_auth_error(err: tower::BoxError) -> (StatusCode, &'static str) {
+    match err.downcast::<axum_token_auth::ValidationErrors>() {
+        Ok(_) => { (StatusCode::UNAUTHORIZED, "Request is not authorized") }
+        Err(_) => { (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error") }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -27,6 +41,17 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     info!(" Starting...");
+
+    let persistent_secret = cookie::Key::generate();
+
+    let token = TokenConfig::new_token("token");
+    let cfg = AuthConfig {
+        token_config: Some(token.clone()),
+        persistent_secret,
+        ..Default::default()
+    };
+
+    let auth_layer = cfg.clone().into_layer();
 
     let postgres_url = std::env::var("POSTGRES_URL").expect("POSTGRES_URL not found");
 
@@ -130,13 +155,7 @@ async fn main() {
         }
     });
 
-    let allow_origin = std::env::var("ALLOW_ORIGIN").expect("ALLOW_ORIGIN not found");
-    let origins: Vec<axum::http::HeaderValue> = allow_origin
-        .split(',')
-        .map(|origin| axum::http::HeaderValue::from_str(origin).expect("Invalid URL"))
-        .collect();
-
-    let cors = CorsLayer::new().allow_headers(Any).allow_methods(Any).allow_origin(origins);
+    let cors = CorsLayer::new().allow_headers(Any).allow_methods(Any).allow_origin(Any);
 
     let app = Router::new()
         .route("/api/healthchecker", get(routes::healthchecker::health_checker))
@@ -173,7 +192,13 @@ async fn main() {
                 move |path| routes::manifest::get_manifest(path, shared_state)
             })
         )
-        .layer(cors);
+        .layer(cors)
+        .layer(
+            tower::ServiceBuilder
+                ::new()
+                .layer(HandleErrorLayer::new(handle_auth_error))
+                .layer(auth_layer)
+        );
 
     let port = "0.0.0.0:5000";
     let listener = tokio::net::TcpListener::bind(port).await.unwrap();
@@ -181,6 +206,8 @@ async fn main() {
     let api_handler = spawn(async move { axum::serve(listener, app).await.unwrap() });
 
     info!(" Server is starting on: {:?}", port);
+
+    info!(" Token: {}", token.value);
 
     tokio::select! {
         _ = consumer_handler => {

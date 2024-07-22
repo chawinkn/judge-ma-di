@@ -16,12 +16,12 @@ RUN apt install build-essential libssl-dev libcap-dev pkg-config libsystemd-dev 
 
 # Isolate cgroup v2
 # RUN wget -P /tmp https://github.com/ioi/isolate/archive/master.tar.gz && tar -xzvf /tmp/master.tar.gz -C / > /dev/null
-# RUN make -C /isolate-master isolate && make -C /isolate-master install
+# RUN make -C /isolate-master isolate && make -C /isolate-master install && rm -rf /tmp/master.tar.gz /isolate-master
 # ENV PATH="/isolate-master:$PATH"
 
 # Isolate cgroup v1
 RUN wget -P /tmp https://github.com/ioi/isolate/archive/refs/tags/v1.10.1.tar.gz && tar -xzvf /tmp/v1.10.1.tar.gz -C / > /dev/null
-RUN make -C /isolate-1.10.1 isolate && make -C /isolate-1.10.1 install
+RUN make -C /isolate-1.10.1 isolate && make -C /isolate-1.10.1 install && rm -rf /tmp/v1.10.1.tar.gz /isolate-1.10.1
 ENV PATH="/isolate-1.10.1:$PATH"
 
 # Forgor what this is for
@@ -43,11 +43,5 @@ COPY checker.sh /user/local/bin/checker.sh
 RUN ./checker.sh
 
 EXPOSE 5000
-
-# Install ngrok
-RUN apt-get update && apt-get install -y wget
-RUN wget -q -O - https://ngrok-agent.s3.amazonaws.com/ngrok.asc | tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null && \
-    echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | tee /etc/apt/sources.list.d/ngrok.list && \
-    apt-get update && apt-get install -y ngrok
 
 CMD [ "./judge-ma-di" ]

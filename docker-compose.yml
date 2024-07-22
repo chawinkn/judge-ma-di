@@ -4,10 +4,8 @@ services:
   # db:
   #   container_name: db
   #   image: postgres
-  #   environment:
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: postgres
-  #     POSTGRES_DB: postgres
+  #   env_file:
+  #     - .env
   #   ports:
   #     - 5432:5432
   #   volumes:
@@ -18,9 +16,8 @@ services:
     tty: true
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: "root"
-      RABBITMQ_DEFAULT_PASS: "root"
+    env_file:
+      - .env
     ports:
       - "15672:15672"
       - "5672:5672"
@@ -30,11 +27,8 @@ services:
       context: ./
       dockerfile: Dockerfile
     privileged: true
-    environment:
-      POSTGRES_URL: postgres://postgres:postgres@localhost:5432
-      MAX_WORKER: 1
-      ALLOW_ORIGIN: http://localhost:3000
-      RBMQ_URL: amqp://root:root@rabbitmq:5672
+    env_file:
+      - .env
     restart: always
     ports:
       - 5000:5000
@@ -42,7 +36,9 @@ services:
       - rabbitmq
   ngrok:
     image: wernight/ngrok
-    command: sh -c "ngrok authtoken YOUR_AUTH_TOKEN && ngrok http --domain=YOUR_DOMAIN rustapp:5000"
+    command: sh -c "ngrok authtoken ${NGROK_AUTH_TOKEN} && ngrok http --domain=${DOMAIN} rustapp:5000"
+    env_file:
+      - .env
     ports:
       - "4040:4040"
     depends_on:
