@@ -32,6 +32,8 @@ services:
     restart: always
     ports:
       - 5000:5000
+    volumes:
+      - rustapp_data:/user/local/bin/tasks
     depends_on:
       - rabbitmq
   ngrok:
