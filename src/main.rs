@@ -1,9 +1,5 @@
 use std::{ sync::Arc, process::exit, time::Duration };
-use axum::{
-    extract::DefaultBodyLimit,
-    routing::{ delete, get, post },
-    Router,
-};
+use axum::{ extract::DefaultBodyLimit, http::Method, routing::{ delete, get, post }, Router };
 use lapin::Channel;
 use tokio::{ spawn, time::interval };
 use log::{ info, warn };
@@ -13,6 +9,7 @@ use dotenv::dotenv;
 use postgres_openssl::MakeTlsConnector;
 use openssl::ssl::{ SslConnector, SslMethod };
 use tower_http::cors::{ Any, CorsLayer };
+use http::header::CONTENT_TYPE;
 
 pub mod routes;
 pub mod helper;
@@ -134,7 +131,10 @@ async fn main() {
         }
     });
 
-    let cors = CorsLayer::new().allow_headers(Any).allow_methods(Any).allow_origin(Any);
+    let cors = CorsLayer::new()
+        .allow_headers([CONTENT_TYPE])
+        .allow_methods(vec![Method::GET, Method::POST, Method::DELETE])
+        .allow_origin(Any);
 
     let app = Router::new()
         .route("/api/healthchecker", get(routes::healthchecker::health_checker))

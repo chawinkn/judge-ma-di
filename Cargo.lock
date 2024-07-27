@@ -1053,6 +1053,7 @@ dependencies = [
  "axum",
  "dotenv",
  "futures",
+ "http",
  "lapin",
  "log",
  "openssl",
