@@ -99,13 +99,15 @@ pub async fn run(
             for _ in 1..=task_config.num_testcases {
                 let mut score = task_config.full_score / task_config.num_testcases;
                 let isolate_result = isolate.run(test_index).await?;
-                let correct =
-                    isolate_result.status == RunVerdict::VerdictOK &&
-                    isolate.check(test_index).await?;
-                if !correct {
+                let mut correct = true;
+                if isolate_result.status == RunVerdict::VerdictOK {
+                    if !isolate.check(test_index).await? {
+                        score = 0;
+                        correct = false;
+                    }
+                } else {
                     score = 0;
                 }
-
                 let status = if correct {
                     get_status(isolate_result.status)
                 } else {
@@ -150,18 +152,19 @@ pub async fn run(
                         });
                     } else {
                         let isolate_result = isolate.run(test_index).await?;
-                        let mut correct =
-                            isolate_result.status == RunVerdict::VerdictOK &&
-                            isolate.check(test_index).await?;
-                        let score = if correct {
-                            subtask.full_score / subtask.num_testcases
+                        let mut correct = true;
+                        let mut score = subtask.full_score / subtask.num_testcases;
+                        if isolate_result.status == RunVerdict::VerdictOK {
+                            if !isolate.check(test_index).await? {
+                                correct_all = false;
+                                skipped = true;
+                                correct = false;
+                                score = 0;
+                            }
                         } else {
-                            0
-                        };
-
-                        if !correct {
                             correct_all = false;
                             skipped = true;
+                            score = 0;
                         }
 
                         let status = if correct {
