@@ -18,6 +18,7 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
     env_file:
       - .env
+    restart: always
     ports:
       - "15672:15672"
       - "5672:5672"
@@ -36,15 +37,15 @@ services:
       - rustapp_data:/user/local/bin/tasks
     depends_on:
       - rabbitmq
-  ngrok:
-    image: wernight/ngrok
-    command: sh -c "ngrok authtoken ${NGROK_AUTH_TOKEN} && ngrok http --domain=${DOMAIN} rustapp:5000"
-    env_file:
-      - .env
-    ports:
-      - "4040:4040"
-    depends_on:
-      - rustapp
+  # ngrok:
+  #   image: wernight/ngrok
+  #   command: sh -c "ngrok authtoken ${NGROK_AUTH_TOKEN} && ngrok http --domain=${DOMAIN} rustapp:5000"
+  #   env_file:
+  #     - .env
+  #   ports:
+  #     - "4040:4040"
+  #   depends_on:
+  #     - rustapp
 
 volumes:
   # pgdata: {}
