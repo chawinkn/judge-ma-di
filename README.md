@@ -2,11 +2,27 @@
 
 Judge Ma Di (จัดมาดิ๊)
 
+# Stack
+
+- Rust
+- Axum (Rust API Framework)
+- RabbitMQ (Queue)
+- IOI Isolate (Sandbox Environment)
+- PostgreSQL (Database)
+
+# [:link:Setup (with frontend)](https://gist.github.com/chawinkn/f1c7dae8bc4b0b8f489d0f775c715bcd)
+
+- Docker (Containerization)
+
+# Env
+
+- `MAX_WORKER`: Maximum number of concurrent workers (Default = 1)
+
 ## With Docker
 
-setup the services environment or other settings in `docker-compose.yml`
+Setup the services environment or other settings in [`docker-compose.yml`](https://github.com/chawinkn/judge-ma-di/blob/master/docker-compose.yml)
 
-you can change the isolate version (cgroup v1 or v2) in `Dockerfile`
+You can change the isolate version (cgroup v1 or v2) in [`Dockerfile`](https://github.com/chawinkn/judge-ma-di/blob/master/Dockerfile#L17)
 
 ```bash
 $ docker compose up -d
@@ -21,7 +37,7 @@ $ cp .env.example .env
 $ vim .env
 ```
 
-### Install isolate and teslib
+### Install isolate and testlib
 
 ```bash
 $ bash setup.sh
@@ -40,11 +56,3 @@ $ docker compose up -d
 ```bash
 $ cargo run
 ```
-
-## PostgreSQL (Optional)
-
-you can edit the db services in `docker-compose.yml`
-
-## Ngrok (Optional)
-
-you can edit the ngrok command in `docker-compose.yml`
