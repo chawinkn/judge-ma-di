@@ -24,8 +24,9 @@ RUN wget -P /tmp https://github.com/ioi/isolate/archive/refs/tags/v1.10.1.tar.gz
 RUN make -C /isolate-1.10.1 isolate && make -C /isolate-1.10.1 install && rm -rf /tmp/v1.10.1.tar.gz /isolate-1.10.1
 ENV PATH="/isolate-1.10.1:$PATH"
 
-# Forgor what this is for
-RUN wget http://nz2.archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.22_amd64.deb
+# OpenSSL
+# RUN wget http://nz2.archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.22_amd64.deb
+RUN wget http://launchpadlibrarian.net/715615335/libssl1.1_1.1.1f-1ubuntu2.22_amd64.deb
 RUN dpkg -i libssl1.1_1.1.1f-1ubuntu2.22_amd64.deb
 
 WORKDIR /user/local/bin
