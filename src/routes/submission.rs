@@ -1,37 +1,29 @@
-use std::sync::Arc;
-use axum::{ response::IntoResponse, http::StatusCode, Json };
-use serde::{ Deserialize, Serialize };
-use serde_json::json;
-use crate::helper::get_language_config;
-use crate::{ rbmq, AppState };
+use crate::error::{json_response, AppError, ResponseCode};
+use crate::queue::Queue;
+use axum::{response::IntoResponse, Json};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CreateSubmission {
-    task_id: String,
-    submission_id: u64,
-    code: String,
-    language: String,
+    pub task_id: String,
+    pub submission_id: u64,
+    pub code: String,
+    pub language: String,
 }
 
-pub async fn create_submission(
+pub async fn create_submission<Q: Queue>(
     Json(req): Json<CreateSubmission>,
-    state: Arc<AppState>
-) -> impl IntoResponse {
-    match get_language_config(&req.language) {
-        Ok(_) => {}
-        Err(_err) => {
-            return (StatusCode::BAD_REQUEST, Json(json!({ "error": _err.to_string() })));
-        }
-    }
+    queue: Q,
+) -> Result<impl IntoResponse, AppError> {
+    queue
+        .publish(
+            "queue",
+            req.task_id,
+            req.submission_id,
+            req.code,
+            req.language,
+        )
+        .await?;
 
-    rbmq::publish_message(
-        state.channel.to_owned(),
-        "queue".to_string(),
-        req.task_id,
-        req.submission_id,
-        req.code,
-        req.language
-    ).await.expect("Unable to publish RabbitMQ message");
-
-    return (StatusCode::CREATED, Json(json!({ "message": "success" })));
+    Ok(json_response(ResponseCode::Created))
 }

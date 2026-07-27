@@ -1,36 +1,20 @@
+use crate::error::{json_response, ResponseCode};
 use axum::{
-    response::IntoResponse,
-    response::Response,
-    http::StatusCode,
-    Json,
-    http::header,
-    extract::Path,
+    extract::Path, http::header, http::StatusCode, response::IntoResponse, response::Response,
 };
-use serde::{ Deserialize, Serialize };
-use serde_json::json;
+use std::env;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
-use std::env;
-use std::sync::Arc;
-use crate::AppState;
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct GetTask {
-    task_id: String,
-}
-
-pub async fn get_desc(Path(task_id): Path<String>, _state: Arc<AppState>) -> impl IntoResponse {
+pub async fn get_desc(Path(task_id): Path<String>) -> impl IntoResponse {
     let current_dir = env::current_dir().unwrap();
     let path = current_dir.join("tasks").join(task_id).join("desc.pdf");
 
     match File::open(&path).await {
         Ok(mut file) => {
             let mut contents = Vec::new();
-            if let Err(_) = file.read_to_end(&mut contents).await {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Failed to read file" })),
-                ).into_response();
+            if (file.read_to_end(&mut contents).await).is_err() {
+                return json_response(ResponseCode::InternalServerError);
             }
 
             Response::builder()
@@ -40,8 +24,6 @@ pub async fn get_desc(Path(task_id): Path<String>, _state: Arc<AppState>) -> imp
                 .body(contents.into())
                 .unwrap()
         }
-        Err(_) => {
-            (StatusCode::NOT_FOUND, Json(json!({ "error": "File not found" }))).into_response()
-        }
+        Err(_) => json_response(ResponseCode::NotFound),
     }
 }

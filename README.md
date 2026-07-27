@@ -6,7 +6,7 @@ Judge Ma Di (จัดมาดิ๊)
 
 - Rust
 - Axum (Rust API Framework)
-- RabbitMQ (Queue)
+- RabbitMQ (Queue, optional - unset `RBMQ_URL` to use the built-in in-process queue instead)
 - IOI Isolate (Sandbox Environment)
 - PostgreSQL (Database)
 
@@ -14,18 +14,12 @@ Judge Ma Di (จัดมาดิ๊)
 
 - Docker (Containerization)
 
-# Env
-
-- `MAX_WORKER`: Maximum number of concurrent workers (Default = 1)
-
 ## With Docker
 
-Setup the services environment or other settings in [`docker-compose.yml`](https://github.com/chawinkn/judge-ma-di/blob/master/docker-compose.yml)
-
-You can change the isolate version (cgroup v1 or v2) in [`Dockerfile`](https://github.com/chawinkn/judge-ma-di/blob/master/Dockerfile#L17)
+Setup the services environment or other settings in [`compose.yml`](https://github.com/chawinkn/judge-ma-di/blob/master/compose.yml)
 
 ```bash
-$ docker compose up -d
+$ docker compose -f compose.yml up -d
 ```
 
 ## Without Docker

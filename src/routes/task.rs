@@ -1,55 +1,50 @@
-use std::path::PathBuf;
-use std::sync::Arc;
 use axum::{
-    response::IntoResponse,
-    response::Response,
-    http::StatusCode,
-    Json,
-    http::header,
-    extract::Path,
-    extract::Multipart,
+    extract::Multipart, extract::Path, http::header, http::StatusCode, response::IntoResponse,
+    response::Response, Json,
 };
 use futures::StreamExt;
 use serde_json::json;
-use crate::AppState;
-use std::fs::{ self, File };
-use std::io::{ Cursor, Write };
 use std::env;
+use std::fs::{self, File};
+use std::io::{Cursor, Write};
+use std::path::PathBuf;
+
 use tokio::io::AsyncReadExt;
 
-pub async fn get_task_testcases(
-    Path(task_id): Path<String>,
-    _state: Arc<AppState>
-) -> impl IntoResponse {
+use crate::error::{json_response, AppError, ResponseCode};
+use crate::judge::config::get_task_config;
+
+pub async fn get_task_testcases(Path(task_id): Path<String>) -> impl IntoResponse {
     let current_dir = env::current_dir().unwrap();
-    let path = current_dir.join("tasks").join(task_id).join("testcases.zip");
+    let path = current_dir
+        .join("tasks")
+        .join(task_id)
+        .join("testcases.zip");
 
     match tokio::fs::File::open(&path).await {
         Ok(mut file) => {
             let mut contents = Vec::new();
-            if let Err(_) = file.read_to_end(&mut contents).await {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Failed to read file" })),
-                ).into_response();
+            if (file.read_to_end(&mut contents).await).is_err() {
+                return json_response(ResponseCode::InternalServerError);
             }
 
             Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CONTENT_TYPE, "application/zip")
-                .header(header::CONTENT_DISPOSITION, "inline; filename=\"testcases.zip\"")
+                .header(
+                    header::CONTENT_DISPOSITION,
+                    "inline; filename=\"testcases.zip\"",
+                )
                 .body(contents.into())
                 .unwrap()
         }
-        Err(_) => {
-            (StatusCode::NOT_FOUND, Json(json!({ "error": "File not found" }))).into_response()
-        }
+        Err(_) => json_response(ResponseCode::NotFound),
     }
 }
 
 pub async fn upload_task(
     Path(task_id): Path<String>,
-    mut multipart: Multipart
+    mut multipart: Multipart,
 ) -> impl IntoResponse {
     let dir_path = format!("tasks/{}", task_id);
     fs::create_dir_all(&dir_path).unwrap_or_else(|e| {
@@ -75,12 +70,12 @@ pub async fn upload_task(
                     eprintln!("Error deleting directory: {}", e);
                 });
             }
-            zip_extract
-                ::extract(Cursor::new(data), &target_dir, true)
+            zip_extract::extract(Cursor::new(data), &target_dir, true)
                 .expect("Error extracting zip file");
         }
     }
-    return (StatusCode::OK, Json(json!({ "message": "ok" })));
+
+    json_response(ResponseCode::Ok)
 }
 
 pub async fn delete_task(Path(task_id): Path<String>) -> impl IntoResponse {
@@ -88,5 +83,12 @@ pub async fn delete_task(Path(task_id): Path<String>) -> impl IntoResponse {
     fs::remove_dir_all(&dir_path).unwrap_or_else(|e| {
         eprintln!("Error deleting directory: {}", e);
     });
-    return (StatusCode::OK, Json(json!({ "message": "ok" })));
+
+    json_response(ResponseCode::Ok)
+}
+
+pub async fn get_manifest(Path(task_id): Path<String>) -> Result<impl IntoResponse, AppError> {
+    let task_config = get_task_config(&task_id)?;
+
+    Ok((StatusCode::OK, Json(json!(task_config))))
 }
