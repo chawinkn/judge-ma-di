@@ -34,7 +34,7 @@ $ vim .env
 ### Install isolate and testlib
 
 ```bash
-$ bash setup.sh
+$ bash scripts/setup.sh
 ```
 
 ### Start RabbitMQ

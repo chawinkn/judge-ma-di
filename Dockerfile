@@ -29,11 +29,11 @@ COPY --from=builder /app/target/release/judge-ma-di .
 
 COPY config.json /user/local/bin/config.json
 
-COPY checker.sh /user/local/bin/checker.sh
+COPY scripts/checker.sh /user/local/bin/checker.sh
 
 RUN ./checker.sh
 
-COPY entrypoint.sh /user/local/bin/entrypoint.sh
+COPY scripts/entrypoint.sh /user/local/bin/entrypoint.sh
 
 RUN chmod +x /user/local/bin/entrypoint.sh
 

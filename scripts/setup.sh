@@ -28,6 +28,6 @@ sudo make install
 cd ..
 rm -rf isolate
 
-./checker.sh
+"$(dirname "$0")/checker.sh"
 
 echo "${green}Setup successfully!${normal}"
