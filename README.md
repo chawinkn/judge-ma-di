@@ -50,3 +50,11 @@ $ docker compose up -d
 ```bash
 $ cargo run
 ```
+
+### Git hooks
+
+Runs `cargo fmt` + `cargo clippy` on commit. One-time setup per clone:
+
+```bash
+$ git config core.hooksPath .githooks
+```
