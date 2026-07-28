@@ -1,0 +1,449 @@
+# Instincts generated from https://github.com/chawinkn/judge-ma-di
+# Generated: 2026-07-28T06:26:29.662Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: judge-ma-di-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: chore, refactor, test, feat
+
+## Evidence
+
+- 7 commits analyzed
+- Detected conventional commit pattern
+- Examples: refactor: modularize judge/routes, add DI queue, normalize responses, chore: add git hooks format
+
+---
+id: judge-ma-di-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Commit Length
+
+## Action
+
+Keep commit messages concise (~36 characters)
+
+## Evidence
+
+- Average commit message length: 36 chars
+- Based on 7 commits
+
+---
+id: judge-ma-di-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: judge-ma-di-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: judge-ma-di-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: judge-ma-di-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: judge-ma-di-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.ts
+
+## Evidence
+
+- File pattern: *.test.ts
+- Consistent across test files
+
+---
+id: judge-ma-di-workflow-refactor-core-architecture
+trigger: "when doing refactor core architecture"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Workflow Refactor Core Architecture
+
+## Action
+
+Follow the refactor-core-architecture workflow:
+1. Update environment and config files (.env.example, config.json)
+2. Modify Cargo.toml and Cargo.lock for dependencies
+3. Edit or add core source files (src/queue.rs, src/lib.rs, src/main.rs, src/routes/*, src/worker.rs, etc.)
+4. Update or add documentation (README.md)
+5. Update or add tests (tests/queue.rs, tests/submission.rs, tests/worker.rs)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: .env.example, Cargo.toml, Cargo.lock
+
+---
+id: judge-ma-di-workflow-script-file-reorganization
+trigger: "when doing script file reorganization"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Workflow Script File Reorganization
+
+## Action
+
+Follow the script-file-reorganization workflow:
+1. Move or rename script files (checker.sh, entrypoint.sh, setup.sh)
+2. Update Dockerfile and README.md to reflect new script locations
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: Dockerfile, README.md, scripts/checker.sh
+
+---
+id: judge-ma-di-instinct-file-naming
+trigger: "When creating or renaming a source file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Instinct File Naming
+
+## Action
+
+Use camelCase for file names
+
+## Evidence
+
+- Pattern in namingConventions.files: camelCase
+
+---
+id: judge-ma-di-instinct-function-naming
+trigger: "When defining a function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Instinct Function Naming
+
+## Action
+
+Use camelCase for function names
+
+## Evidence
+
+- Pattern in namingConventions.functions: camelCase
+
+---
+id: judge-ma-di-instinct-class-naming
+trigger: "When defining a class or struct"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Instinct Class Naming
+
+## Action
+
+Use PascalCase for class names
+
+## Evidence
+
+- Pattern in namingConventions.classes: PascalCase
+
+---
+id: judge-ma-di-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for constant names
+
+## Evidence
+
+- Pattern in namingConventions.constants: SCREAMING_SNAKE_CASE
+
+---
+id: judge-ma-di-instinct-import-style
+trigger: "When importing modules"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Instinct Import Style
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in importStyle: relative
+
+---
+id: judge-ma-di-instinct-export-style
+trigger: "When exporting modules or functions"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle: named
+
+---
+id: judge-ma-di-instinct-test-location
+trigger: "When adding or organizing test files"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Instinct Test Location
+
+## Action
+
+Place tests in a separate 'tests' directory
+
+## Evidence
+
+- Pattern in architecture.folderStructure.testLocation: separate
+- Files: tests/queue.rs, tests/submission.rs, tests/worker.rs
+
+---
+id: judge-ma-di-instinct-test-pattern
+trigger: "When naming test files"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Instinct Test Pattern
+
+## Action
+
+Use the '*.test.ts' pattern for test file names
+
+## Evidence
+
+- Pattern in testing.filePattern: *.test.ts
+
+---
+id: judge-ma-di-instinct-test-type
+trigger: "When writing tests"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Instinct Test Type
+
+## Action
+
+Write unit tests by default
+
+## Evidence
+
+- Pattern in testing.testTypes: unit
+
+---
+id: judge-ma-di-instinct-commit-format
+trigger: "When making a git commit"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Instinct Commit Format
+
+## Action
+
+Use conventional commit prefixes: chore, refactor, test, feat
+
+## Evidence
+
+- Pattern in commits.prefixes
+- Seen in commit: 'refactor: modularize judge/routes, add DI queue, normalize responses'
+
+---
+id: judge-ma-di-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Instinct Commit Length
+
+## Action
+
+Keep commit messages concise (around 36 characters on average)
+
+## Evidence
+
+- Pattern in commits.averageLength: 36
+
+---
+id: judge-ma-di-instinct-refactor-core-architecture
+trigger: "When changing core architecture or replacing a major component (e.g., queue system, modularizing routes)"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Instinct Refactor Core Architecture
+
+## Action
+
+Update env/config files, modify Cargo.toml/Cargo.lock, edit core source files, update docs, and update/add tests
+
+## Evidence
+
+- Workflow: refactor-core-architecture
+- Seen in commits: 'refactor: replace RabbitMQ queue with Postgres-polling worker'
+- Pattern in files: .env.example, Cargo.toml, src/queue.rs, README.md, tests/queue.rs
+
+---
+id: judge-ma-di-instinct-script-file-reorganization
+trigger: "When reorganizing script files for structure or clarity"
+confidence: 0.85
+domain: workflow
+source: repo-analysis
+source_repo: chawinkn/judge-ma-di
+---
+
+# Judge Ma Di Instinct Script File Reorganization
+
+## Action
+
+Move/rename scripts and update references in Dockerfile and README.md
+
+## Evidence
+
+- Workflow: script-file-reorganization
+- Seen in commit: 'chore: move to /scripts'
+- Pattern in files: scripts/checker.sh, Dockerfile, README.md
+
