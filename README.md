@@ -6,7 +6,6 @@ Judge Ma Di (จัดมาดิ๊)
 
 - Rust
 - Axum (Rust API Framework)
-- RabbitMQ (Queue, optional - unset `RBMQ_URL` to use the built-in in-process queue instead)
 - IOI Isolate (Sandbox Environment)
 - PostgreSQL (Database)
 
@@ -16,7 +15,7 @@ Judge Ma Di (จัดมาดิ๊)
 
 ## With Docker
 
-Setup the services environment or other settings in [`compose.yml`](https://github.com/chawinkn/judge-ma-di/blob/master/compose.yml)
+Setup the services environment or other settings in `compose.yml`
 
 ```bash
 $ docker compose -f compose.yml up -d
@@ -35,14 +34,6 @@ $ vim .env
 
 ```bash
 $ bash scripts/setup.sh
-```
-
-### Start RabbitMQ
-
-enable only rabbitmq in `docker-compose.yml`
-
-```bash
-$ docker compose up -d
 ```
 
 ### Start

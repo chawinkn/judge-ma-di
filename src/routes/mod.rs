@@ -1,14 +1,12 @@
 pub mod desc;
 pub mod healthcheck;
-pub mod submission;
 pub mod task;
 
-use crate::queue::JobQueue;
 use axum::{
     extract::{DefaultBodyLimit, MatchedPath, Request},
     http::Method,
     routing::{delete, get, post},
-    Json, Router,
+    Router,
 };
 use deadpool_postgres::Pool;
 use tower_http::{
@@ -17,7 +15,7 @@ use tower_http::{
 };
 use tracing::info_span;
 
-pub fn build(publish_channel: JobQueue, pool: Pool) -> Router {
+pub fn build(pool: Pool) -> Router {
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_origin(Any);
@@ -26,12 +24,6 @@ pub fn build(publish_channel: JobQueue, pool: Pool) -> Router {
         .route(
             "/api/healthcheck",
             get(move || healthcheck::health_check(pool.clone())),
-        )
-        .route(
-            "/api/submit",
-            post(move |body: Json<submission::CreateSubmission>| {
-                submission::create_submission(body, publish_channel)
-            }),
         )
         .route("/api/task/:id", get(task::get_task_testcases))
         .route(

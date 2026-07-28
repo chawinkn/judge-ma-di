@@ -1,4 +1,4 @@
-use judge_ma_di::{db, queue, routes};
+use judge_ma_di::{db, routes, worker};
 use std::process::exit;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -31,15 +31,15 @@ async fn main() {
         exit(1);
     });
 
-    let rbmq_url = std::env::var("RBMQ_URL").ok();
-    let (queue, consumer_handler) = queue::start(rbmq_url.as_deref(), pool.clone())
-        .await
-        .unwrap_or_else(|err| {
-            warn!("Failed to start queue: {:?}", err);
+    let worker_pool = pool.clone();
+    let worker_handler = tokio::spawn(async move {
+        if let Err(err) = worker::run_worker(worker_pool).await {
+            warn!("Worker failed: {:?}", err);
             exit(1);
-        });
+        }
+    });
 
-    let app = routes::build(queue, pool);
+    let app = routes::build(pool);
 
     let port = "0.0.0.0:5000";
     let listener = tokio::net::TcpListener::bind(port).await.unwrap();
@@ -50,8 +50,8 @@ async fn main() {
     });
 
     tokio::select! {
-        _ = consumer_handler => {
-            warn!("Consumer handler kaboom!!!");
+        _ = worker_handler => {
+            warn!("Worker handler kaboom!!!");
             exit(1);
         }
         _ = api_handler => {
