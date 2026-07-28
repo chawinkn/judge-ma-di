@@ -1,16 +1,29 @@
-use std::{ fs::{ self, File }, io::Write, path::PathBuf, str::from_utf8 };
-use tokio::process::Command;
-use std::env;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::env;
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+    str::from_utf8,
+};
+use tokio::process::Command;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum RunVerdict {
+    #[serde(rename = "Compilation Error")]
     CompilationError,
+    #[serde(rename = "Accepted")]
     VerdictOK,
+    #[serde(rename = "Time Limit Exceeded")]
     VerdictTLE,
+    #[serde(rename = "Memory Limit Exceeded")]
     VerdictMLE,
+    #[serde(rename = "Runtime Error")]
     VerdictRE,
+    #[serde(rename = "Internal Error")]
     VerdictXX,
+    #[serde(rename = "Signal Error")]
     VerdictSG,
 }
 
@@ -47,7 +60,8 @@ impl Isolate {
             .arg("--cg")
             .arg(format!("--box-id={}", self.box_id))
             .arg("--init")
-            .output().await?;
+            .output()
+            .await?;
 
         let box_path = String::from_utf8(box_path.stdout)?;
         self.box_path = PathBuf::from(box_path.trim()).join("box");
@@ -57,7 +71,10 @@ impl Isolate {
         let mut file = File::create(destination_path)?;
         file.write_all(self.code.as_bytes())?;
 
-        let input_path = current_dir.join("tasks").join(&self.task_id).join("testcases");
+        let input_path = current_dir
+            .join("tasks")
+            .join(&self.task_id)
+            .join("testcases");
 
         for entry in fs::read_dir(input_path)? {
             let entry = entry?;
@@ -73,24 +90,25 @@ impl Isolate {
     pub async fn compile(&mut self) -> Result<IsolateResult> {
         let mut compile_script = self.compile_script.replace(
             "{source_file}",
-            &format!("{}/source.{}", self.box_path.display(), self.ext)
+            &format!("{}/source.{}", self.box_path.display(), self.ext),
         );
         if self.ext != "py" {
-            compile_script = compile_script.replace(
-                "{output}",
-                &format!("{}/source", self.box_path.display())
-            );
+            compile_script =
+                compile_script.replace("{output}", &format!("{}/source", self.box_path.display()));
         }
 
-        let split: Vec<&str> = compile_script.split(' ').collect();
-        let output = Command::new(split[0])
-            .args(&split[1..])
-            .output().await?;
+        let mut parts = compile_script.split(' ');
+        let program = parts.next().unwrap_or_default();
+        let output = Command::new(program).args(parts).output().await?;
 
-        let mut result: IsolateResult = Default::default();
-        if !output.status.success() {
-            result.status = RunVerdict::CompilationError;
-        }
+        let result = if output.status.success() {
+            IsolateResult::default()
+        } else {
+            IsolateResult {
+                status: RunVerdict::CompilationError,
+                ..Default::default()
+            }
+        };
 
         Ok(result)
     }
@@ -103,39 +121,40 @@ impl Isolate {
             .arg(format!("{}/{}.in", self.box_path.display(), test_index))
             .arg(format!("{}/out.out", self.box_path.display()))
             .arg(format!("{}/{}.sol", self.box_path.display(), test_index))
-            .output().await?;
+            .output()
+            .await?;
 
-        let stdout = from_utf8(&result.stdout).unwrap().to_string();
+        let stdout = from_utf8(&result.stdout).unwrap();
 
-        Ok(stdout == "Correct\n100\n".to_string())
+        Ok(stdout == "Correct\n100\n")
     }
 
     pub async fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
         let run_script = self.run_script.replace("{source}", "source");
-        let split: Vec<&str> = run_script.split(' ').collect();
 
         Command::new("isolate")
             .arg("--cg")
             .arg(format!("--box-id={}", self.box_id))
-            .arg(format!("--time={}", self.time_limit.to_string()))
-            .arg(format!("--wall-time={}", (self.time_limit + 5.0).to_string()))
-            .arg(format!("--extra-time={}", (self.time_limit + 1.0).to_string()))
+            .arg(format!("--time={}", self.time_limit))
+            .arg(format!("--wall-time={}", (self.time_limit + 5.0)))
+            .arg(format!("--extra-time={}", (self.time_limit + 1.0)))
             .arg(format!("--cg-mem={}", self.memory_limit))
             .arg(format!("--meta={}/meta.txt", self.box_path.display()))
             .arg(format!("--stdin={}.in", test_index))
             .arg("--stdout=out.out")
-            // .arg("--processes=128")
+            .arg("--processes=128")
             .arg("--run")
             .arg("--")
-            .args(split)
-            .output().await?;
+            .args(run_script.split(' '))
+            .output()
+            .await?;
 
-        let result = self.get_result().await?;
+        let result = self.get_result()?;
 
         Ok(result)
     }
 
-    pub async fn get_result(&self) -> Result<IsolateResult> {
+    pub fn get_result(&self) -> Result<IsolateResult> {
         let mut result: IsolateResult = Default::default();
         let mut memory_limit_exceeded = false;
 
@@ -179,8 +198,30 @@ impl Isolate {
             .arg("--cg")
             .arg(format!("--box-id={}", self.box_id))
             .arg("--cleanup")
-            .output().await?;
+            .output()
+            .await?;
 
         Ok(())
+    }
+}
+
+/// What `judge::runner`'s scoring logic (run_normal/run_subtask) actually
+/// needs from a sandbox. Lets that logic be tested with a fake instead of
+/// requiring a real isolate CLI + cgroups on the test host.
+pub trait Sandbox {
+    fn run(
+        &mut self,
+        test_index: u64,
+    ) -> impl std::future::Future<Output = Result<IsolateResult>> + Send;
+    fn check(&mut self, test_index: u64) -> impl std::future::Future<Output = Result<bool>> + Send;
+}
+
+impl Sandbox for Isolate {
+    async fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
+        Isolate::run(self, test_index).await
+    }
+
+    async fn check(&mut self, test_index: u64) -> Result<bool> {
+        Isolate::check(self, test_index).await
     }
 }

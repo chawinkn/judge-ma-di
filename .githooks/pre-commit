@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+
+echo "Running cargo fmt..."
+cargo fmt
+git add -u
+
+echo "Running cargo clippy..."
+cargo clippy --all-targets -- -D warnings

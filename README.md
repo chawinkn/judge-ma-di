@@ -6,7 +6,6 @@ Judge Ma Di (จัดมาดิ๊)
 
 - Rust
 - Axum (Rust API Framework)
-- RabbitMQ (Queue)
 - IOI Isolate (Sandbox Environment)
 - PostgreSQL (Database)
 
@@ -14,18 +13,12 @@ Judge Ma Di (จัดมาดิ๊)
 
 - Docker (Containerization)
 
-# Env
-
-- `MAX_WORKER`: Maximum number of concurrent workers (Default = 1)
-
 ## With Docker
 
-Setup the services environment or other settings in [`docker-compose.yml`](https://github.com/chawinkn/judge-ma-di/blob/master/docker-compose.yml)
-
-You can change the isolate version (cgroup v1 or v2) in [`Dockerfile`](https://github.com/chawinkn/judge-ma-di/blob/master/Dockerfile#L17)
+Setup the services environment or other settings in `compose.yml`
 
 ```bash
-$ docker compose up -d
+$ docker compose -f compose.yml up -d
 ```
 
 ## Without Docker
@@ -40,19 +33,19 @@ $ vim .env
 ### Install isolate and testlib
 
 ```bash
-$ bash setup.sh
-```
-
-### Start RabbitMQ
-
-enable only rabbitmq in `docker-compose.yml`
-
-```bash
-$ docker compose up -d
+$ bash scripts/setup.sh
 ```
 
 ### Start
 
 ```bash
 $ cargo run
+```
+
+### Git hooks
+
+Runs `cargo fmt` + `cargo clippy` on commit. One-time setup per clone:
+
+```bash
+$ git config core.hooksPath .githooks
 ```

@@ -1,19 +1,22 @@
 {
-  "language": {
-    "cpp": {
-      "ext": "cpp",
-      "compile": "g++ --std=c++17 -O2 {source_file} -o {output}",
-      "run": "./{source}"
-    },
-    "c": {
-      "ext": "c",
-      "compile": "gcc --std=c11 -O2 {source_file} -o {output}",
-      "run": "./{source}"
-    },
-    "python": {
-      "ext": "py",
-      "compile": "python3 -m compileall {source_file} -b",
-      "run": "/usr/bin/python3 {source}.py"
-    }
-  }
+    "language": [
+        {
+            "lang": "cpp",
+            "ext": "cpp",
+            "compile": "g++ --std=c++17 -O2 {source_file} -o {output}",
+            "run": "./{source}"
+        },
+        {
+            "lang": "c",
+            "ext": "c",
+            "compile": "gcc --std=c11 -O2 {source_file} -o {output}",
+            "run": "./{source}"
+        },
+        {
+            "lang": "python",
+            "ext": "py",
+            "compile": "python3 -m compileall {source_file} -b",
+            "run": "/usr/bin/python3 {source}.py"
+        }
+    ]
 }
