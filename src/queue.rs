@@ -214,22 +214,18 @@ async fn judge_payload(db_client: &Client, payload: Payload) -> Result<()> {
 
     let row = db_client
         .query_opt(
-            "SELECT id FROM submission WHERE id = $1",
+            "UPDATE submission SET status = 'Judging' WHERE id = $1 AND status = 'In Queue' RETURNING id",
             &[&(submission_id as i32)],
         )
         .await?;
 
     if row.is_none() {
-        warn!("Submission ID {} not found", submission_id);
+        warn!(
+            "Submission ID {} not found or not in queue, skipping",
+            submission_id
+        );
         return Ok(());
     };
-
-    db_client
-        .query_opt(
-            "UPDATE submission SET status = $1 WHERE id = $2",
-            &[&"Judging", &(submission_id as i32)],
-        )
-        .await?;
 
     match run(task_id, submission_id, code, language).await {
         Ok(judge_result) => {
