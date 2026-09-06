@@ -1,5 +1,8 @@
 use anyhow::Result;
-use std::{cmp, fmt, fs, path::PathBuf};
+use std::{
+    cmp, fmt, fs,
+    path::{Path, PathBuf},
+};
 
 use crate::judge::config::{get_language_config, get_task_config, Subtask};
 use crate::judge::isolate::{Isolate, RunVerdict, Sandbox};
@@ -63,10 +66,10 @@ pub enum RunStatus {
     Skipped,
 }
 
-fn is_testcases_error(task_path: &str, num_testcases: u64) -> bool {
+pub fn is_testcases_error(task_path: &Path, num_testcases: u64) -> bool {
     (1..=num_testcases).any(|i| {
-        fs::metadata(format!("{}/{}.in", task_path, i)).is_err()
-            || fs::metadata(format!("{}/{}.sol", task_path, i)).is_err()
+        fs::metadata(task_path.join(format!("{}.in", i))).is_err()
+            || fs::metadata(task_path.join(format!("{}.sol", i))).is_err()
     })
 }
 
@@ -79,7 +82,16 @@ pub async fn run(
     let language_config = get_language_config(&language).map_err(anyhow::Error::msg)?;
     let task_config = get_task_config(&task_id).map_err(anyhow::Error::msg)?;
 
-    let task_path = format!("tasks/{}/testcases", task_id);
+    let testcases_dir = PathBuf::from(format!("tasks/{task_id}/testcases"));
+
+    if is_testcases_error(&testcases_dir, task_config.num_testcases) {
+        let judge_result = JudgeResult {
+            status: JudgeStatus::TestcasesError,
+            ..Default::default()
+        };
+
+        return Ok(judge_result);
+    }
 
     let mut isolate = Isolate {
         box_path: PathBuf::new(),
@@ -92,16 +104,8 @@ pub async fn run(
         compile_script: language_config.compile,
         run_script: language_config.run,
         checker: task_config.checker,
+        testcases_dir,
     };
-
-    if is_testcases_error(&task_path, task_config.num_testcases) {
-        let judge_result = JudgeResult {
-            status: JudgeStatus::TestcasesError,
-            ..Default::default()
-        };
-
-        return Ok(judge_result);
-    }
 
     isolate.init().await?;
     let compile_result = isolate.compile().await?;
