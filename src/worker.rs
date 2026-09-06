@@ -17,11 +17,12 @@ fn poll_interval() -> Duration {
     )
 }
 
-struct PolledSubmission {
-    submission_id: u64,
-    task_id: String,
-    code: Vec<u8>,
-    language: String,
+#[derive(Debug, PartialEq, Eq)]
+pub struct PolledSubmission {
+    pub submission_id: u64,
+    pub task_id: String,
+    pub code: Vec<u8>,
+    pub language: String,
 }
 
 pub async fn run_worker(pool: Pool) -> Result<()> {
@@ -43,7 +44,7 @@ pub async fn run_worker(pool: Pool) -> Result<()> {
 
 // TODO: crash mid-judge leaves row stuck at 'Judging' forever. Need
 // updated_at column + reclaim query.
-async fn poll_next_submission(db_client: &Client) -> Result<Option<PolledSubmission>> {
+pub async fn poll_next_submission(db_client: &Client) -> Result<Option<PolledSubmission>> {
     let row = db_client
         .query_opt(
             "
