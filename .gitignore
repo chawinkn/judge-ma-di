@@ -6,3 +6,6 @@
 .vscode
 .env
 /tasks
+.agents
+.claude
+skills-lock.json

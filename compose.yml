@@ -1,0 +1,39 @@
+services:
+  db:
+    container_name: db
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - 5432:5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+  rustapp:
+    image: rustapp
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    privileged: true
+    cgroup: host
+    environment:
+      POSTGRES_URL: postgres://postgres:postgres@db:5432/postgres
+    volumes:
+      - ./tasks:/user/local/bin/tasks
+    restart: always
+    ports:
+      - 5000:5000
+    depends_on:
+      - db
+  # ngrok:
+  #   image: wernight/ngrok
+  #   command: sh -c "ngrok authtoken 1v9dv1TC2DoW6AdksBFiVEZFbo7_2KVp69FVdwm9S1T6Hnppe && ngrok http --domain=causal-touching-mullet.ngrok-free.app rustapp:5000"
+  #   ports:
+  #     - "4040:4040"
+  #   depends_on:
+  #     - rustapp
+
+volumes:
+  pgdata:

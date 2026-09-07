@@ -20,6 +20,35 @@ async fn test_pool() -> Option<Pool> {
     let pool = Pool::builder(mgr).max_size(2).build().ok()?;
     let client = pool.get().await.ok()?;
     client.execute("SELECT 1", &[]).await.ok()?;
+    client
+        .batch_execute(
+            "
+            CREATE TABLE IF NOT EXISTS task (
+                id         TEXT PRIMARY KEY,
+                title      TEXT NOT NULL DEFAULT '',
+                full_score INTEGER NOT NULL DEFAULT 100,
+                private    BOOLEAN NOT NULL DEFAULT FALSE
+            );
+            CREATE TABLE IF NOT EXISTS submission (
+                id           SERIAL PRIMARY KEY,
+                task_id      TEXT NOT NULL,
+                status       TEXT NOT NULL DEFAULT 'In Queue',
+                submitted_at TIMESTAMPTZ DEFAULT NOW(),
+                time         INTEGER NOT NULL DEFAULT 0,
+                memory       INTEGER NOT NULL DEFAULT 0,
+                code         BYTEA NOT NULL,
+                score        INTEGER NOT NULL DEFAULT 0,
+                result       JSONB NOT NULL DEFAULT '[]'::jsonb,
+                language     TEXT NOT NULL,
+                private      BOOLEAN NOT NULL DEFAULT FALSE
+            );
+            CREATE INDEX IF NOT EXISTS idx_submission_queue
+            ON submission (submitted_at ASC, id ASC)
+            WHERE status = 'In Queue';
+            ",
+        )
+        .await
+        .ok()?;
     Some(pool)
 }
 

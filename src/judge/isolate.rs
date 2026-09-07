@@ -1,11 +1,9 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::env;
 use std::{
     fs::{self, File},
     io::Write,
     path::PathBuf,
-    str::from_utf8,
 };
 use tokio::process::Command;
 
@@ -75,45 +73,47 @@ impl Isolate {
     }
 
     pub async fn compile(&mut self) -> Result<IsolateResult> {
-        let mut compile_script = self.compile_script.replace(
-            "{source_file}",
-            &format!("{}/source.{}", self.box_path.display(), self.ext),
-        );
-        if self.ext != "py" {
-            compile_script =
-                compile_script.replace("{output}", &format!("{}/source", self.box_path.display()));
-        }
+        let compile_script = self
+            .compile_script
+            .replace("{source_file}", &format!("source.{}", self.ext))
+            .replace("{output}", "source");
 
-        let mut parts = compile_script.split(' ');
-        let program = parts.next().unwrap_or_default();
-        let output = Command::new(program).args(parts).output().await?;
+        let output = Command::new("isolate")
+            .arg("--cg")
+            .arg(format!("--box-id={}", self.box_id))
+            .arg("--time=10")
+            .arg("--wall-time=15")
+            .arg("--extra-time=1")
+            .arg("--cg-mem=1048576")
+            .arg("--processes=128")
+            .arg("--env=PATH=/usr/bin:/bin")
+            .arg("--run")
+            .arg("--")
+            .args(compile_script.split(' '))
+            .output()
+            .await?;
 
-        let result = if output.status.success() {
-            IsolateResult::default()
+        let status = if output.status.success() {
+            RunVerdict::VerdictOK
         } else {
-            IsolateResult {
-                status: RunVerdict::CompilationError,
-                ..Default::default()
-            }
+            RunVerdict::CompilationError
         };
 
-        Ok(result)
+        Ok(IsolateResult {
+            status,
+            ..Default::default()
+        })
     }
 
     pub async fn check(&mut self, test_index: u64) -> Result<bool> {
-        let current_dir = env::current_dir()?;
-        let checker_dir = current_dir.join("checker");
-
-        let result = Command::new(checker_dir.join(&self.checker))
+        let result = Command::new(format!("checker/{}", self.checker))
             .arg(self.testcases_dir.join(format!("{}.in", test_index)))
             .arg(self.box_path.join("out.out"))
             .arg(self.testcases_dir.join(format!("{}.sol", test_index)))
             .output()
             .await?;
 
-        let stdout = from_utf8(&result.stdout).unwrap();
-
-        Ok(stdout == "Correct\n100\n")
+        Ok(result.stdout == b"Correct\n100\n")
     }
 
     pub async fn run(&mut self, test_index: u64) -> Result<IsolateResult> {

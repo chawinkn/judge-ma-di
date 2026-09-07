@@ -48,3 +48,18 @@ async fn test_isolate_exploit_cannot_read_solutions() {
     assert_eq!(res.status, JudgeStatus::Completed);
     assert_eq!(res.score, 0);
 }
+
+#[tokio::test]
+async fn test_isolate_compilation_error_handled() {
+    if !has_isolate_cgroup() {
+        return;
+    }
+    let code = "int main() { syntax error here }";
+    let res = run("a_plus_b".into(), 84, code.into(), "cpp".into())
+        .await
+        .unwrap();
+
+    assert_eq!(res.status, JudgeStatus::CompilationError);
+    assert_eq!(res.score, 0);
+    assert!(res.result.is_empty());
+}

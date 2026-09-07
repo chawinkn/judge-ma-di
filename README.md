@@ -54,6 +54,8 @@ $ docker compose -f compose.yml up -d
 ```bash
 $ cp .env.example .env
 $ vim .env
+# Export environment variables into your shell (POSTGRES_URL is required by main.rs)
+$ set -a && source .env && set +a
 ```
 
 ### Install isolate and testlib
