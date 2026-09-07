@@ -101,8 +101,7 @@ async fn judge_and_writeback(db_client: &Client, polled: PolledSubmission) -> Re
     info!(
         submission_id,
         task_id = %task_id,
-        language = %language,
-        "Judging submission started"
+        "Start"
     );
 
     let attempt = match decode_source_code(&code) {
@@ -116,7 +115,7 @@ async fn judge_and_writeback(db_client: &Client, polled: PolledSubmission) -> Re
                 submission_id,
                 task_id = %task_id,
                 status = %judge_result.status,
-                "Finished judging submission"
+                "Finished"
             );
             let result_json = serde_json::to_value(&judge_result.result).unwrap();
             debug!(
