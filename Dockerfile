@@ -1,44 +1,55 @@
-FROM rust:1-bookworm as builder
+FROM rust:1-bookworm AS builder
 
 WORKDIR /app
 
-COPY . .
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
 
-RUN cargo build --release
+# Cache mount not in image layer -> copy binary out in same RUN
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo build --release \
+    && cp target/release/judge-ma-di /app/judge-ma-di
 
-FROM debian:bookworm-slim
+# Must stay root: isolate is setuid and entrypoint delegates cgroup v2
+FROM debian:bookworm-slim AS runtime
 
-RUN apt update -y
-RUN apt install wget tar gzip git -y
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        git \
+        libcap-dev \
+        libseccomp-dev \
+        libssl-dev \
+        libsystemd-dev \
+        pkg-config \
+        python3 \
+        wget \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install dependecies and initialize isolate sandbox
-RUN apt install build-essential libssl-dev libcap-dev libseccomp-dev pkg-config libsystemd-dev python3 -y
+# master branch required: cgroup v2 not in released tags
+RUN wget -qO- https://github.com/ioi/isolate/archive/master.tar.gz | tar -xz -C /tmp \
+    && make -C /tmp/isolate-master isolate \
+    && make -C /tmp/isolate-master install \
+    && rm -rf /tmp/isolate-master
 
-# Isolate cgroup v2 (required for memory accounting/limiting)
-RUN wget -P /tmp https://github.com/ioi/isolate/archive/master.tar.gz && tar -xzvf /tmp/master.tar.gz -C / > /dev/null
-RUN make -C /isolate-master isolate && make -C /isolate-master install && rm -rf /tmp/master.tar.gz /isolate-master
-
-# isolate --cg needs a subuid/subgid range for the "isolate" user to set up its namespaces
+# isolate --cg requires subuid/subgid range
 RUN useradd -r isolate \
     && echo "isolate:200000:65536" >> /etc/subuid \
     && echo "isolate:200000:65536" >> /etc/subgid
 
 WORKDIR /user/local/bin
 
-COPY --from=builder /app/target/release/judge-ma-di .
-
-COPY config.json /user/local/bin/config.json
-
-COPY scripts/checker.sh /user/local/bin/checker.sh
-
+COPY --chmod=755 scripts/checker.sh ./checker.sh
 RUN ./checker.sh
 
-COPY scripts/entrypoint.sh /user/local/bin/entrypoint.sh
+COPY config.json ./config.json
+COPY --chmod=755 scripts/entrypoint.sh ./entrypoint.sh
 
-RUN chmod +x /user/local/bin/entrypoint.sh
+COPY --from=builder /app/judge-ma-di ./judge-ma-di
 
 EXPOSE 5000
 
-ENTRYPOINT [ "./entrypoint.sh" ]
-
-CMD [ "./judge-ma-di" ]
+ENTRYPOINT ["./entrypoint.sh"]
+CMD ["./judge-ma-di"]

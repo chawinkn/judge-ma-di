@@ -45,6 +45,7 @@ pub struct Isolate {
     pub compile_script: String,
     pub run_script: String,
     pub checker: String,
+    pub testcases_dir: PathBuf,
 }
 
 #[derive(Default, PartialEq, Debug)]
@@ -66,23 +67,9 @@ impl Isolate {
         let box_path = String::from_utf8(box_path.stdout)?;
         self.box_path = PathBuf::from(box_path.trim()).join("box");
 
-        let current_dir = env::current_dir()?;
         let destination_path = self.box_path.join(format!("source.{}", self.ext));
         let mut file = File::create(destination_path)?;
         file.write_all(self.code.as_bytes())?;
-
-        let input_path = current_dir
-            .join("tasks")
-            .join(&self.task_id)
-            .join("testcases");
-
-        for entry in fs::read_dir(input_path)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            let destination_path = self.box_path.join(path.file_name().unwrap_or_default());
-            fs::copy(&path, &destination_path)?;
-        }
 
         Ok(())
     }
@@ -117,10 +104,10 @@ impl Isolate {
         let current_dir = env::current_dir()?;
         let checker_dir = current_dir.join("checker");
 
-        let result = Command::new(format!("{}/{}", checker_dir.display(), self.checker))
-            .arg(format!("{}/{}.in", self.box_path.display(), test_index))
-            .arg(format!("{}/out.out", self.box_path.display()))
-            .arg(format!("{}/{}.sol", self.box_path.display(), test_index))
+        let result = Command::new(checker_dir.join(&self.checker))
+            .arg(self.testcases_dir.join(format!("{}.in", test_index)))
+            .arg(self.box_path.join("out.out"))
+            .arg(self.testcases_dir.join(format!("{}.sol", test_index)))
             .output()
             .await?;
 
@@ -131,6 +118,7 @@ impl Isolate {
 
     pub async fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
         let run_script = self.run_script.replace("{source}", "source");
+        let input_file = File::open(self.testcases_dir.join(format!("{}.in", test_index)))?;
 
         Command::new("isolate")
             .arg("--cg")
@@ -140,7 +128,7 @@ impl Isolate {
             .arg(format!("--extra-time={}", (self.time_limit + 1.0)))
             .arg(format!("--cg-mem={}", self.memory_limit))
             .arg(format!("--meta={}/meta.txt", self.box_path.display()))
-            .arg(format!("--stdin={}.in", test_index))
+            .stdin(input_file)
             .arg("--stdout=out.out")
             .arg("--processes=128")
             .arg("--run")
