@@ -101,7 +101,7 @@ tasks/<task_id>/
 ### Flat Scoring Mechanics
 
 When `subtasks` is empty (`[]`):
-1. **Per-Testcase Weight**: Each testcase is worth $\frac{\text{full\_score}}{\text{num\_testcases}}$ points (here: $100 / 10 = 10$ points each).
+1. **Per-Testcase Weight**: Each testcase is worth $\frac{\text{full score}}{\text{num testcases}}$ points (here: $100 / 10 = 10$ points each).
 2. **Independent Evaluation**: If testcase 2 fails (e.g., Wrong Answer), testcases 3 through 10 still run.
 3. **Total Score**: Sum of points earned on passing testcases.
 
