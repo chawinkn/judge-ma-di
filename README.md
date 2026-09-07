@@ -102,6 +102,7 @@ $ cargo test --features integration # Int tests (requires Isolate + Postgres)
 
 ## Documentation
 
+- [docs/tasks.md](docs/tasks.md): Task directory structure, `manifest.json` specification, and full examples (`a_plus_b`, subtasks).
 - [docs/architecture.md](docs/architecture.md): Architecture overview, evaluation lifecycle flow, and design rationale.
 - [docs/scaling.md](docs/scaling.md): Horizontal worker scaling, role separation, and cloud deployment guide.
 - [docs/scripts.md](docs/scripts.md): Reference for provisioning, checker compilation, and database setup scripts.
