@@ -116,9 +116,6 @@ async fn judge_and_writeback(db_client: &Client, polled: PolledSubmission) -> Re
                 submission_id,
                 task_id = %task_id,
                 status = %judge_result.status,
-                score = judge_result.score,
-                time = judge_result.time,
-                memory = judge_result.memory,
                 "Finished judging submission"
             );
             let result_json = serde_json::to_value(&judge_result.result).unwrap();
