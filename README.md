@@ -100,6 +100,9 @@ $ cargo test                        # Unit tests
 $ cargo test --features integration # Int tests (requires Isolate + Postgres)
 ```
 
-### API Specification
+## Documentation
 
-OpenAPI 3.0 specification is available at [docs/openapi.yaml](docs/openapi.yaml).
+- [docs/architecture.md](docs/architecture.md): Architecture overview, evaluation lifecycle flow, and design rationale.
+- [docs/scaling.md](docs/scaling.md): Horizontal worker scaling, role separation, and cloud deployment guide.
+- [docs/scripts.md](docs/scripts.md): Reference for provisioning, checker compilation, and database setup scripts.
+- [docs/openapi.yaml](docs/openapi.yaml): Full OpenAPI 3.0 REST API specification.
