@@ -236,19 +236,3 @@ impl Sandbox for Isolate {
         Isolate::check(self, test_index).await
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_check_rejects_malicious_checker() {
-        let mut isolate = Isolate {
-            checker: "../../../bin/sh".to_string(),
-            ..Default::default()
-        };
-        let res = isolate.check(1).await;
-        assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains("Unsupported checker"));
-    }
-}

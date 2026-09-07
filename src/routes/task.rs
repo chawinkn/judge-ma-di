@@ -13,7 +13,7 @@ use crate::judge::config::{get_task_config, validate_checker, TaskConfig};
 const MAX_ZIP_TOTAL_SIZE: u64 = 256 * 1024 * 1024; // 256 MB
 const MAX_ZIP_FILES: usize = 1000;
 
-fn safe_extract_zip(data: &[u8], target: &std::path::Path) -> Result<(), AppError> {
+pub fn safe_extract_zip(data: &[u8], target: &std::path::Path) -> Result<(), AppError> {
     let extract = || -> Result<(), AppError> {
         let mut archive = zip::ZipArchive::new(Cursor::new(data))
             .map_err(|e| AppError::BadRequest(format!("Invalid zip archive: {e}")))?;
@@ -68,7 +68,7 @@ fn safe_extract_zip(data: &[u8], target: &std::path::Path) -> Result<(), AppErro
     res
 }
 
-fn validate_task_id(task_id: &str) -> Result<(), AppError> {
+pub fn validate_task_id(task_id: &str) -> Result<(), AppError> {
     if task_id.is_empty()
         || !task_id
             .chars()
@@ -177,108 +177,4 @@ pub async fn get_desc(Path(task_id): Path<String>) -> Result<impl IntoResponse, 
         ],
         contents,
     ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_validate_task_id_valid() {
-        assert!(validate_task_id("a_plus_b").is_ok());
-        assert!(validate_task_id("task-123").is_ok());
-        assert!(validate_task_id("0").is_ok());
-        assert!(validate_task_id("TASK").is_ok());
-    }
-
-    #[test]
-    fn test_validate_task_id_invalid() {
-        assert!(validate_task_id("").is_err());
-        assert!(validate_task_id("../etc").is_err());
-        assert!(validate_task_id("task/1").is_err());
-        assert!(validate_task_id("task\\1").is_err());
-        assert!(validate_task_id("task.name").is_err());
-        assert!(validate_task_id("task name").is_err());
-    }
-
-    #[test]
-    fn test_filename_sanitization() {
-        let extract_safe_name = |raw: &str| {
-            std::path::Path::new(raw)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .map(|s| s.to_string())
-        };
-
-        assert_eq!(
-            extract_safe_name("../../evil.txt"),
-            Some("evil.txt".to_string())
-        );
-        assert_eq!(extract_safe_name("/etc/passwd"), Some("passwd".to_string()));
-        assert_eq!(
-            extract_safe_name("manifest.json"),
-            Some("manifest.json".to_string())
-        );
-        assert_eq!(extract_safe_name(".."), None);
-        assert_eq!(extract_safe_name("."), None);
-        assert_eq!(extract_safe_name(""), None);
-    }
-
-    #[test]
-    fn test_safe_extract_zip_valid() {
-        let mut buf = Vec::new();
-        {
-            let mut writer = zip::ZipWriter::new(Cursor::new(&mut buf));
-            writer
-                .start_file("1.in", zip::write::FileOptions::default())
-                .unwrap();
-            std::io::Write::write_all(&mut writer, b"1 2\n").unwrap();
-            writer.finish().unwrap();
-        }
-
-        let temp_dir = std::env::temp_dir().join("test_safe_extract_valid");
-        let _ = std::fs::remove_dir_all(&temp_dir);
-        assert!(safe_extract_zip(&buf, &temp_dir).is_ok());
-        assert_eq!(
-            std::fs::read_to_string(temp_dir.join("1.in")).unwrap(),
-            "1 2\n"
-        );
-        let _ = std::fs::remove_dir_all(&temp_dir);
-    }
-
-    #[test]
-    fn test_safe_extract_zip_rejects_traversal() {
-        let mut buf = Vec::new();
-        {
-            let mut writer = zip::ZipWriter::new(Cursor::new(&mut buf));
-            writer
-                .start_file("../evil.txt", zip::write::FileOptions::default())
-                .unwrap();
-            std::io::Write::write_all(&mut writer, b"evil").unwrap();
-            writer.finish().unwrap();
-        }
-
-        let temp_dir = std::env::temp_dir().join("test_safe_extract_traversal");
-        let _ = std::fs::remove_dir_all(&temp_dir);
-        assert!(safe_extract_zip(&buf, &temp_dir).is_err());
-        assert!(!temp_dir.exists());
-    }
-
-    #[test]
-    fn test_manifest_validation_rejects_bad_checker() {
-        let bad_manifest = br#"{
-            "time_limit": 1.0,
-            "memory_limit": 256,
-            "checker": "../../../bin/sh",
-            "skip": false,
-            "full_score": 100,
-            "num_testcases": 1,
-            "subtasks": []
-        }"#;
-
-        let parsed: Result<TaskConfig, _> = serde_json::from_slice(bad_manifest);
-        assert!(parsed.is_ok());
-        let task_config = parsed.unwrap();
-        assert!(validate_checker(&task_config.checker).is_err());
-    }
 }

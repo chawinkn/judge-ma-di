@@ -1,3 +1,4 @@
+use judge_ma_di::judge::isolate::Isolate;
 use judge_ma_di::judge::runner::{is_testcases_error, run, JudgeStatus};
 use std::path::Path;
 
@@ -65,4 +66,15 @@ fn testcases_validation_fails_when_testcase_count_insufficient() {
         Path::new("tasks/a_plus_b/testcases"),
         99
     ));
+}
+
+#[tokio::test]
+async fn test_check_rejects_malicious_checker() {
+    let mut isolate = Isolate {
+        checker: "../../../bin/sh".to_string(),
+        ..Default::default()
+    };
+    let res = isolate.check(1).await;
+    assert!(res.is_err());
+    assert!(res.unwrap_err().to_string().contains("Unsupported checker"));
 }
