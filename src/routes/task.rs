@@ -8,7 +8,7 @@ use axum::{
 use std::io::{Cursor, Read};
 
 use crate::error::{json_response, AppError, ResponseCode};
-use crate::judge::config::get_task_config;
+use crate::judge::config::{get_task_config, validate_checker, TaskConfig};
 
 const MAX_ZIP_TOTAL_SIZE: u64 = 256 * 1024 * 1024; // 256 MB
 const MAX_ZIP_FILES: usize = 1000;
@@ -125,6 +125,12 @@ pub async fn upload_task(
             .bytes()
             .await
             .map_err(|e| AppError::BadRequest(e.to_string()))?;
+
+        if safe_name == "manifest.json" {
+            let manifest: TaskConfig = serde_json::from_slice(&data)
+                .map_err(|e| AppError::BadRequest(format!("Invalid manifest.json: {e}")))?;
+            validate_checker(&manifest.checker)?;
+        }
 
         tokio::fs::write(format!("{dir}/{safe_name}"), &data).await?;
 
@@ -256,5 +262,23 @@ mod tests {
         let _ = std::fs::remove_dir_all(&temp_dir);
         assert!(safe_extract_zip(&buf, &temp_dir).is_err());
         assert!(!temp_dir.exists());
+    }
+
+    #[test]
+    fn test_manifest_validation_rejects_bad_checker() {
+        let bad_manifest = br#"{
+            "time_limit": 1.0,
+            "memory_limit": 256,
+            "checker": "../../../bin/sh",
+            "skip": false,
+            "full_score": 100,
+            "num_testcases": 1,
+            "subtasks": []
+        }"#;
+
+        let parsed: Result<TaskConfig, _> = serde_json::from_slice(bad_manifest);
+        assert!(parsed.is_ok());
+        let task_config = parsed.unwrap();
+        assert!(validate_checker(&task_config.checker).is_err());
     }
 }

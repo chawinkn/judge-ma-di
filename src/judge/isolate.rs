@@ -1,10 +1,13 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
     path::PathBuf,
+    time::Duration,
 };
 use tokio::process::Command;
+
+use crate::judge::config::validate_checker;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum RunVerdict {
@@ -128,14 +131,19 @@ impl Isolate {
     }
 
     pub async fn check(&mut self, test_index: u64) -> Result<bool> {
-        let result = Command::new(format!("checker/{}", self.checker))
+        validate_checker(&self.checker).map_err(anyhow::Error::msg)?;
+
+        let child = Command::new(format!("checker/{}", self.checker))
             .arg(self.testcases_dir.join(format!("{}.in", test_index)))
             .arg(self.box_path.join("out.out"))
             .arg(self.testcases_dir.join(format!("{}.sol", test_index)))
-            .output()
-            .await?;
+            .output();
 
-        Ok(result.stdout == b"Correct\n100\n")
+        let result = tokio::time::timeout(Duration::from_secs(10), child)
+            .await
+            .context("Checker execution timed out after 10 seconds")??;
+
+        Ok(result.status.success() && result.stdout == b"Correct\n100\n")
     }
 
     pub async fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
@@ -226,5 +234,21 @@ impl Sandbox for Isolate {
 
     async fn check(&mut self, test_index: u64) -> Result<bool> {
         Isolate::check(self, test_index).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_check_rejects_malicious_checker() {
+        let mut isolate = Isolate {
+            checker: "../../../bin/sh".to_string(),
+            ..Default::default()
+        };
+        let res = isolate.check(1).await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("Unsupported checker"));
     }
 }
