@@ -2,7 +2,6 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
-    io::Write,
     path::PathBuf,
 };
 use tokio::process::Command;
@@ -37,7 +36,6 @@ pub struct Isolate {
     pub box_id: u64,
     pub time_limit: f64,
     pub memory_limit: u64,
-    pub task_id: String,
     pub code: String,
     pub ext: String,
     pub compile_script: String,
@@ -65,9 +63,10 @@ impl Isolate {
         let box_path = String::from_utf8(box_path.stdout)?;
         self.box_path = PathBuf::from(box_path.trim()).join("box");
 
-        let destination_path = self.box_path.join(format!("source.{}", self.ext));
-        let mut file = File::create(destination_path)?;
-        file.write_all(self.code.as_bytes())?;
+        fs::write(
+            self.box_path.join(format!("source.{}", self.ext)),
+            &self.code,
+        )?;
 
         Ok(())
     }
@@ -149,11 +148,10 @@ impl Isolate {
         let meta = fs::read_to_string(format!("{}/meta.txt", self.box_path.display()))?;
 
         for meta_line in meta.lines() {
-            let args: Vec<&str> = meta_line.split(":").collect();
-            if args.len() >= 2 {
-                match args[0] {
+            if let Some((key, val)) = meta_line.split_once(':') {
+                match key {
                     "status" => {
-                        result.status = match args[1] {
+                        result.status = match val {
                             "RE" => RunVerdict::VerdictRE,
                             "SG" => RunVerdict::VerdictSG,
                             "TO" => RunVerdict::VerdictTLE,
@@ -161,15 +159,9 @@ impl Isolate {
                             _ => RunVerdict::VerdictSG,
                         };
                     }
-                    "time" => {
-                        result.time_usage = args[1].parse()?;
-                    }
-                    "cg-mem" => {
-                        result.memory_usage = args[1].parse()?;
-                    }
-                    "cg-oom-killed" => {
-                        memory_limit_exceeded = args[1].trim() == "1";
-                    }
+                    "time" => result.time_usage = val.parse()?,
+                    "cg-mem" => result.memory_usage = val.parse()?,
+                    "cg-oom-killed" => memory_limit_exceeded = val.trim() == "1",
                     _ => (),
                 }
             }

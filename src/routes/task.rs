@@ -5,7 +5,6 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde_json::json;
 use std::io::Cursor;
 use std::path::PathBuf;
 
@@ -79,5 +78,19 @@ pub async fn delete_task(Path(task_id): Path<String>) -> Result<impl IntoRespons
 
 pub async fn get_manifest(Path(task_id): Path<String>) -> Result<impl IntoResponse, AppError> {
     let task_config = get_task_config(&task_id)?;
-    Ok((StatusCode::OK, Json(json!(task_config))))
+    Ok((StatusCode::OK, Json(task_config)))
+}
+
+pub async fn get_desc(Path(task_id): Path<String>) -> Result<impl IntoResponse, AppError> {
+    let contents = tokio::fs::read(format!("tasks/{task_id}/desc.pdf"))
+        .await
+        .map_err(|_| AppError::NotFound(format!("Description for task '{task_id}' not found")))?;
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/pdf"),
+            (header::CONTENT_DISPOSITION, "inline; filename=\"desc.pdf\""),
+        ],
+        contents,
+    ))
 }

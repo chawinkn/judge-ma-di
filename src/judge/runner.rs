@@ -98,7 +98,6 @@ pub async fn run(
         box_id: submission_id % 1000,
         time_limit: task_config.time_limit,
         memory_limit: task_config.memory_limit * 1000,
-        task_id,
         code,
         ext: language_config.ext,
         compile_script: language_config.compile,

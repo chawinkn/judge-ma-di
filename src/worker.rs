@@ -100,8 +100,10 @@ async fn judge_and_writeback(db_client: &Client, polled: PolledSubmission) -> Re
 
     info!("Judging submission_id: {}", submission_id);
 
-    let attempt =
-        async { run(task_id, submission_id, decode_source_code(&code)?, language).await }.await;
+    let attempt = match decode_source_code(&code) {
+        Ok(source) => run(task_id, submission_id, source, language).await,
+        Err(err) => Err(err),
+    };
 
     match attempt {
         Ok(judge_result) => {

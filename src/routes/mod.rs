@@ -1,4 +1,3 @@
-pub mod desc;
 pub mod healthcheck;
 pub mod task;
 
@@ -30,10 +29,10 @@ pub fn build(pool: Pool) -> Router {
             get(task::get_manifest)
                 .post(task::upload_task)
                 .delete(task::delete_task)
-                .layer(DefaultBodyLimit::max(1024 * 1000 * 10)),
+                .layer(DefaultBodyLimit::max(10 * 1024 * 1024)),
         )
         .route("/api/tasks/:id/manifest", get(task::get_manifest))
-        .route("/api/tasks/:id/desc", get(desc::get_desc))
+        .route("/api/tasks/:id/desc", get(task::get_desc))
         .route("/api/tasks/:id/testcases", get(task::get_task_testcases))
         .layer(cors)
         .layer(
