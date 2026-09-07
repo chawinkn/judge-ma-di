@@ -8,8 +8,8 @@ COPY src ./src
 # Cache mount not in image layer -> copy binary out in same RUN
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
-    cargo build --release \
-    && cp target/release/judge-ma-di /app/judge-ma-di
+    cargo build --release --bins \
+    && cp target/release/judge-ma-di target/release/judge-worker target/release/judge-api /app/
 
 # Must stay root: isolate is setuid and entrypoint delegates cgroup v2
 FROM debian:bookworm-slim AS runtime
@@ -48,6 +48,8 @@ COPY config.json ./config.json
 COPY --chmod=755 scripts/entrypoint.sh ./entrypoint.sh
 
 COPY --from=builder /app/judge-ma-di ./judge-ma-di
+COPY --from=builder /app/judge-worker ./judge-worker
+COPY --from=builder /app/judge-api ./judge-api
 
 EXPOSE 5000
 

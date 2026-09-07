@@ -26,6 +26,18 @@ deadpool-postgres = "0.14.1"
 [features]
 integration = []
 
+[[bin]]
+name = "judge-ma-di"
+path = "src/main.rs"
+
+[[bin]]
+name = "judge-worker"
+path = "src/bin/judge_worker.rs"
+
+[[bin]]
+name = "judge-api"
+path = "src/bin/judge_api.rs"
+
 [[test]]
 name = "integration"
 path = "tests/integration/mod.rs"
