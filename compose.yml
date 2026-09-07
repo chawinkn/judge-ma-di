@@ -20,6 +20,7 @@ services:
     cgroup: host
     environment:
       POSTGRES_URL: postgres://postgres:postgres@db:5432/postgres
+      APP_ENV: ${APP_ENV:-production}
     volumes:
       - ./tasks:/user/local/bin/tasks
     restart: always
