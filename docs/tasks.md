@@ -26,7 +26,7 @@ tasks/<task_id>/
 ### File Conventions
 * **Input files (`<index>.in`)**: Plain text fed directly to the user process via host `stdin`. Numbered consecutively starting from `1` up to `num_testcases`.
 * **Solution files (`<index>.sol`)**: Plain text expected output passed to the checker binary. Numbering matches `.in` files.
-* **Problem statement (`desc.pdf`)**: Downloaded by users via `GET /api/tasks/:id/statement`.
+* **Problem statement (`desc.pdf`)**: Downloaded by users via `GET /api/tasks/:id/desc`.
 * **Archive (`testcases.zip`)**: Downloaded via `GET /api/tasks/:id/testcases` and unpacked automatically on upload.
 
 ---
