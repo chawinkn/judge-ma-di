@@ -225,7 +225,7 @@ curl -X POST http://localhost:5000/api/tasks/a_plus_b \
   -F "testcases.zip=@tasks/a_plus_b/testcases.zip"
 ```
 
-The API creates `tasks/a_plus_b/`, writes the files, and automatically unzips `testcases.zip` into `tasks/a_plus_b/testcases/`.
+The API validates the task ID (`^[a-zA-Z0-9_-]+$`), sanitizes multipart filenames against path traversal, and safely extracts `testcases.zip` into `tasks/a_plus_b/testcases/` (enforcing limits of max 1,000 files, max 256 MB uncompressed, and strict entry path containment).
 
 ### Method B: Via Database Registration
 

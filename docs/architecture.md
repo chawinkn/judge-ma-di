@@ -157,7 +157,7 @@ The database uses PostgreSQL 17 with two core tables defined in `scripts/init.sq
    * `submitted_at` (`TIMESTAMPTZ DEFAULT NOW()`): Timestamp of submission receipt.
    * `time` (`INTEGER NOT NULL DEFAULT 0`): Max runtime across testcases in **milliseconds (ms)**.
    * `memory` (`INTEGER NOT NULL DEFAULT 0`): Max memory across testcases in **kilobytes (KB)**.
-   * `code` (`BYTEA NOT NULL`): **Brotli-compressed JSON** source code (decompressed into UTF-8 JSON string or single-element array).
+   * `code` (`BYTEA NOT NULL`): **Brotli-compressed JSON** source code (decompressed into UTF-8 JSON string or single-element array; capped at 10 MB uncompressed to prevent Brotli decompression bombs).
    * `score` (`INTEGER NOT NULL DEFAULT 0`): Points earned out of `full_score`.
    * `result` (`JSONB NOT NULL DEFAULT '[]'::jsonb`): Array of per-testcase evaluation results:
      ```json
