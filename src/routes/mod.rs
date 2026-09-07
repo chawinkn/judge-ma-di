@@ -5,7 +5,7 @@ pub mod task;
 use axum::{
     extract::{DefaultBodyLimit, MatchedPath, Request},
     http::Method,
-    routing::{delete, get, post},
+    routing::get,
     Router,
 };
 use deadpool_postgres::Pool;
@@ -25,14 +25,16 @@ pub fn build(pool: Pool) -> Router {
             "/api/healthcheck",
             get(move || healthcheck::health_check(pool.clone())),
         )
-        .route("/api/task/:id", get(task::get_task_testcases))
         .route(
-            "/api/task/:id",
-            post(task::upload_task).layer(DefaultBodyLimit::max(1024 * 1000 * 10)),
+            "/api/tasks/:id",
+            get(task::get_manifest)
+                .post(task::upload_task)
+                .delete(task::delete_task)
+                .layer(DefaultBodyLimit::max(1024 * 1000 * 10)),
         )
-        .route("/api/task/:id", delete(task::delete_task))
-        .route("/api/desc/:id", get(desc::get_desc))
-        .route("/api/task/manifest/:id", get(task::get_manifest))
+        .route("/api/tasks/:id/manifest", get(task::get_manifest))
+        .route("/api/tasks/:id/desc", get(desc::get_desc))
+        .route("/api/tasks/:id/testcases", get(task::get_task_testcases))
         .layer(cors)
         .layer(
             TraceLayer::new_for_http().make_span_with(|request: &Request<_>| {

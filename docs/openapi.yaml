@@ -1,0 +1,320 @@
+openapi: 3.1.0
+info:
+  title: Judge-ma-di API
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000
+
+paths:
+  /api/healthcheck:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+              example:
+                code: "OK"
+        '503':
+          description: Database unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+              example:
+                code: "SERVICE_UNAVAILABLE"
+
+  /api/tasks/{id}:
+    get:
+      summary: Get task manifest
+      operationId: getManifest
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "a_plus_b"
+      responses:
+        '200':
+          description: Task configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskConfig'
+              example:
+                time_limit: 1.0
+                memory_limit: 256
+                checker: "lcmp"
+                skip: true
+                full_score: 100
+                num_testcases: 10
+                subtasks:
+                  - full_score: 30
+                    num_testcases: 3
+                  - full_score: 70
+                    num_testcases: 7
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+              example:
+                code: "NOT_FOUND"
+
+    post:
+      summary: Upload task assets
+      description: Multipart upload. Any `.zip` file is extracted into `testcases/`. Max payload 10 MB.
+      operationId: uploadTask
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "a_plus_b"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                manifest.json:
+                  type: string
+                  format: binary
+                desc.pdf:
+                  type: string
+                  format: binary
+                testcases.zip:
+                  type: string
+                  format: binary
+                  description: Extracted into testcases/ (.in/.sol pairs)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+              example:
+                code: "OK"
+        '400':
+          description: Bad request (missing filename, invalid multipart, or corrupted zip)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+              example:
+                code: "BAD_REQUEST"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+              example:
+                code: "INTERNAL_SERVER_ERROR"
+
+    delete:
+      summary: Delete task
+      operationId: deleteTask
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "a_plus_b"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+              example:
+                code: "OK"
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+              example:
+                code: "NOT_FOUND"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+              example:
+                code: "INTERNAL_SERVER_ERROR"
+
+  /api/tasks/{id}/manifest:
+    get:
+      summary: Get task manifest (alias)
+      operationId: getManifestExplicit
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "a_plus_b"
+      responses:
+        '200':
+          description: Task configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskConfig'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+
+  /api/tasks/{id}/desc:
+    get:
+      summary: Get problem description PDF
+      operationId: getDesc
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "a_plus_b"
+      responses:
+        '200':
+          description: PDF file
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: 'inline; filename="desc.pdf"'
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+              example:
+                code: "NOT_FOUND"
+
+  /api/tasks/{id}/testcases:
+    get:
+      summary: Download testcases archive
+      operationId: getTaskTestcases
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "a_plus_b"
+      responses:
+        '200':
+          description: Testcases zip archive
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: 'inline; filename="testcases.zip"'
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+              example:
+                code: "NOT_FOUND"
+
+components:
+  schemas:
+    StandardResponse:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          enum:
+            - OK
+            - CREATED
+            - BAD_REQUEST
+            - NOT_FOUND
+            - SERVICE_UNAVAILABLE
+            - INTERNAL_SERVER_ERROR
+          example: "OK"
+
+    Subtask:
+      type: object
+      required:
+        - full_score
+        - num_testcases
+      properties:
+        full_score:
+          type: integer
+          example: 30
+        num_testcases:
+          type: integer
+          example: 3
+
+    TaskConfig:
+      type: object
+      required:
+        - time_limit
+        - memory_limit
+        - checker
+        - skip
+        - full_score
+        - num_testcases
+        - subtasks
+      properties:
+        time_limit:
+          type: number
+          format: double
+          description: Seconds
+          example: 1.0
+        memory_limit:
+          type: integer
+          description: Megabytes (MB)
+          example: 256
+        checker:
+          type: string
+          description: Testlib binary name in checker/
+          example: "lcmp"
+        skip:
+          type: boolean
+          description: Stop subtask on first failure
+          example: true
+        full_score:
+          type: integer
+          example: 100
+        num_testcases:
+          type: integer
+          example: 10
+        subtasks:
+          type: array
+          description: Empty for uniform scoring
+          items:
+            $ref: '#/components/schemas/Subtask'
