@@ -49,7 +49,7 @@ tasks/<task_id>/
 | :--- | :--- | :--- |
 | `time_limit` | `float` | Maximum CPU execution time in seconds per testcase (enforced by Isolate `--time`). |
 | `memory_limit` | `integer` | Maximum memory limit in megabytes per testcase (enforced by Isolate cgroups v2 `--cg-mem`). |
-| `checker` | `string` | Binary name of the validator located in `./checker/` (e.g. `lcmp`, `wcmp`, `ncmp`). |
+| `checker` | `string` | Binary name of the validator located in `./checker/` (must be one of: `fcmp`, `hcmp`, `lcmp`, `ncmp`, `rcmp4`, `rcmp6`, `rcmp9`, `wcmp`, `yesno`). |
 | `skip` | `boolean` | If `true`, stops evaluating subsequent testcases in a subtask immediately upon the first non-OK verdict. |
 | `full_score` | `integer` | Total maximum score awarded for passing all testcases (typically `100`). |
 | `num_testcases` | `integer` | Total count of testcases (`1` through `N`). All matching `.in` and `.sol` files must exist. |
@@ -205,6 +205,10 @@ The `checker` field references compiled binaries in `./checker/` built from [tes
 | `rcmp9` | Floating point comparison with precision tolerance $\epsilon \le 10^{-9}$. | High-precision geometry / math problems. |
 | `yesno` | Case-insensitive match for `YES` / `NO`. | Decision problems accepting `Yes`, `yes`, `YES`, etc. |
 | `fcmp` | Strict full-file binary diff. | Exact formatting / byte-exact output requirements. |
+| `hcmp` | Huge integer / tokens line-by-line comparison. | Arbitrarily large integers or huge token outputs. |
+
+> [!NOTE]
+> **Security & Allowlist**: The `checker` field is strictly validated against the above precompiled Testlib binaries (`ALLOWED_CHECKERS`). Any path separators (`/`, `\`), directory traversal tokens (`..`), null bytes, or unrecognized names are rejected with `400 Bad Request` on upload and cause a `Judge Error` on evaluation. Checkers execute with a 10-second timeout to prevent DoS from hanging processes.
 
 ---
 
@@ -225,7 +229,7 @@ curl -X POST http://localhost:5000/api/tasks/a_plus_b \
   -F "testcases.zip=@tasks/a_plus_b/testcases.zip"
 ```
 
-The API validates the task ID (`^[a-zA-Z0-9_-]+$`), sanitizes multipart filenames against path traversal, and safely extracts `testcases.zip` into `tasks/a_plus_b/testcases/` (enforcing limits of max 1,000 files, max 256 MB uncompressed, and strict entry path containment).
+The API validates the task ID (`^[a-zA-Z0-9_-]+$`), sanitizes multipart filenames against path traversal, validates `manifest.json` against the allowed checker allowlist, and safely extracts `testcases.zip` into `tasks/a_plus_b/testcases/` (enforcing limits of max 1,000 files, max 256 MB uncompressed, and strict entry path containment).
 
 ### Method B: Via Database Registration
 
