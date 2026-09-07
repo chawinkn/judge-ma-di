@@ -72,14 +72,26 @@ impl Isolate {
     }
 
     pub async fn compile(&mut self) -> Result<IsolateResult> {
+        let compile_box_id = self.box_id + 1000;
+        let box_path = Command::new("isolate")
+            .arg("--cg")
+            .arg(format!("--box-id={compile_box_id}"))
+            .arg("--init")
+            .output()
+            .await?;
+
+        let compile_box = PathBuf::from(String::from_utf8(box_path.stdout)?.trim()).join("box");
+        let source_file = format!("source.{}", self.ext);
+        fs::write(compile_box.join(&source_file), &self.code)?;
+
         let compile_script = self
             .compile_script
-            .replace("{source_file}", &format!("source.{}", self.ext))
+            .replace("{source_file}", &source_file)
             .replace("{output}", "source");
 
         let output = Command::new("isolate")
             .arg("--cg")
-            .arg(format!("--box-id={}", self.box_id))
+            .arg(format!("--box-id={compile_box_id}"))
             .arg("--time=10")
             .arg("--wall-time=15")
             .arg("--extra-time=1")
@@ -93,10 +105,21 @@ impl Isolate {
             .await?;
 
         let status = if output.status.success() {
+            let compiled_bin = compile_box.join("source");
+            if compiled_bin.exists() {
+                fs::copy(&compiled_bin, self.box_path.join("source"))?;
+            }
             RunVerdict::VerdictOK
         } else {
             RunVerdict::CompilationError
         };
+
+        let _ = Command::new("isolate")
+            .arg("--cg")
+            .arg(format!("--box-id={compile_box_id}"))
+            .arg("--cleanup")
+            .output()
+            .await;
 
         Ok(IsolateResult {
             status,
