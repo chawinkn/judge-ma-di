@@ -70,11 +70,19 @@ pub async fn poll_next_submission(db_client: &Client) -> Result<Option<PolledSub
     }))
 }
 
+const MAX_DECOMPRESSED_SOURCE: u64 = 10 * 1024 * 1024; // 10 MB
+
 /// `code` is brotli-compressed JSON. Frontend types it as `string[]` but
 /// real rows store a bare string - both accepted.
 pub fn decode_source_code(compressed: &[u8]) -> Result<String> {
     let mut decompressed = Vec::new();
-    Decompressor::new(compressed, 4096).read_to_end(&mut decompressed)?;
+    Decompressor::new(compressed, 4096)
+        .take(MAX_DECOMPRESSED_SOURCE + 1)
+        .read_to_end(&mut decompressed)?;
+
+    if decompressed.len() as u64 > MAX_DECOMPRESSED_SOURCE {
+        return Err(anyhow!("submission code exceeds maximum size of 10 MB"));
+    }
 
     match serde_json::from_slice(&decompressed)? {
         serde_json::Value::String(code) => Ok(code),

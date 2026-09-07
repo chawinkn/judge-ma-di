@@ -53,3 +53,13 @@ fn decodes_a_typical_python_solution() {
 
     assert_eq!(decode_source_code(&compressed).unwrap(), source);
 }
+
+#[test]
+fn errors_on_brotli_bomb_exceeding_10mb() {
+    // 11 MB of repeated characters compresses to small brotli payload
+    let large_code = "a".repeat(11 * 1024 * 1024);
+    let compressed = compress_json(&large_code);
+
+    let err = decode_source_code(&compressed).unwrap_err();
+    assert!(err.to_string().contains("exceeds maximum size"));
+}

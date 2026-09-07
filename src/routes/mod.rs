@@ -26,6 +26,7 @@ pub fn build(pool: Pool) -> Router {
         )
         .route(
             "/api/tasks/:id",
+            // TODO: Auth
             get(task::get_manifest)
                 .post(task::upload_task)
                 .delete(task::delete_task)
