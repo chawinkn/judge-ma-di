@@ -35,13 +35,18 @@ flowchart LR
     Worker -->|"Update verdict & score\n(status -> 'Completed')"| DB
 ```
 
-# [:link:Setup (with frontend)](https://gist.github.com/chawinkn/f1c7dae8bc4b0b8f489d0f775c715bcd)
+Binaries:
+- **`judge-ma-di`**: Combined monolith (API + Worker).
+- **`judge-api`**: Standalone HTTP REST API for task management.
+- **`judge-worker`**: Standalone worker polling Postgres and running judge evaluations.
+
+### [:link:Setup (with frontend)](https://gist.github.com/chawinkn/f1c7dae8bc4b0b8f489d0f775c715bcd)
 
 - Docker (Containerization)
 
 ## With Docker
 
-Setup the services environment or other settings in `compose.yml`
+Setup the services environment in `compose.yml`:
 
 ```bash
 $ docker compose -f compose.yml up -d
@@ -54,11 +59,13 @@ $ docker compose -f compose.yml up -d
 ```bash
 $ cp .env.example .env
 $ vim .env
-# Export environment variables into your shell (POSTGRES_URL is required by main.rs)
+# Export environment variables into your shell (POSTGRES_URL is required)
 $ set -a && source .env && set +a
 ```
 
 ### Install isolate and testlib
+
+See [docs/scripts.md](docs/scripts.md) for reference documentation on each utility script.
 
 ```bash
 $ bash scripts/setup.sh
@@ -67,8 +74,16 @@ $ bash scripts/setup.sh
 ### Start
 
 ```bash
-$ cargo run
+$ cargo run                         # Monolith (API + Worker)
+$ cargo run --bin judge-api         # API Only (port 5000)
+$ cargo run --bin judge-worker      # Worker Only
 ```
+
+### Environment & Observability
+
+- **`APP_ENV=production`**: Structured single-line JSON logs with `severity` field (`DEBUG`, `INFO`, `WARNING`, `ERROR`). 
+- **`APP_ENV=development`** (default): Human-readable terminal output.
+- **`RUST_LOG`**: Optional override for custom tracing filters (e.g. `RUST_LOG=trace`).
 
 ### Git hooks
 
@@ -81,6 +96,10 @@ $ git config core.hooksPath .githooks
 ### Testing
 
 ```bash
-$ cargo test                        # unit tests
-$ cargo test --features integration # integration tests
+$ cargo test                        # Unit tests
+$ cargo test --features integration # Int tests (requires Isolate + Postgres)
 ```
+
+### API Specification
+
+OpenAPI 3.0 specification is available at [docs/openapi.yaml](docs/openapi.yaml).
