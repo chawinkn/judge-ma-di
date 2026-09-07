@@ -715,8 +715,6 @@ dependencies = [
  "axum",
  "brotli",
  "deadpool-postgres",
- "futures",
- "http",
  "openssl",
  "postgres-openssl",
  "serde",

@@ -20,6 +20,10 @@ async fn test_pool() -> Option<Pool> {
     let pool = Pool::builder(mgr).max_size(2).build().ok()?;
     let client = pool.get().await.ok()?;
     client.execute("SELECT 1", &[]).await.ok()?;
+    client
+        .batch_execute(include_str!("../../scripts/init.sql"))
+        .await
+        .ok()?;
     Some(pool)
 }
 

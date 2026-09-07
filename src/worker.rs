@@ -4,7 +4,7 @@ use deadpool_postgres::{Client, Pool};
 use std::io::Read;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::judge::runner::run;
 
@@ -98,19 +98,31 @@ async fn judge_and_writeback(db_client: &Client, polled: PolledSubmission) -> Re
         language,
     } = polled;
 
-    info!("Judging submission_id: {}", submission_id);
+    info!(
+        submission_id,
+        task_id = %task_id,
+        "Start"
+    );
 
-    let attempt =
-        async { run(task_id, submission_id, decode_source_code(&code)?, language).await }.await;
+    let attempt = match decode_source_code(&code) {
+        Ok(source) => run(task_id.clone(), submission_id, source, language).await,
+        Err(err) => Err(err),
+    };
 
     match attempt {
         Ok(judge_result) => {
             info!(
-                "Finished submission_id: {}, status: {}, score: {}",
-                submission_id, judge_result.status, judge_result.score
+                submission_id,
+                task_id = %task_id,
+                status = %judge_result.status,
+                "Finished"
             );
             let result_json = serde_json::to_value(&judge_result.result).unwrap();
-            info!("{:#?}", judge_result.result);
+            debug!(
+                submission_id,
+                result = ?judge_result.result,
+                "Detailed testcase results"
+            );
             db_client.query_opt(
                      "UPDATE submission SET status = $1, score = $2, time = $3, memory = $4, result = $5 WHERE id = $6 AND status = 'Judging'",
                      &[
@@ -124,7 +136,12 @@ async fn judge_and_writeback(db_client: &Client, polled: PolledSubmission) -> Re
                  ).await?;
         }
         Err(err) => {
-            error!("Error submission_id: {} {:#?}", submission_id, err);
+            error!(
+                submission_id,
+                task_id = %task_id,
+                error = %err,
+                "Submission judge error"
+            );
             db_client
                 .query_opt(
                     "UPDATE submission SET status = 'Judge Error' WHERE id = $1 AND status = 'Judging'",

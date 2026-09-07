@@ -1,10 +1,10 @@
 use std::fmt;
 
 use axum::{
+    http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
-use http::StatusCode;
 use serde_json::json;
 use tracing::error;
 
