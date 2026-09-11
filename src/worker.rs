@@ -128,10 +128,13 @@ async fn judge_and_writeback(db_client: &Client, polled: PolledSubmission) -> Re
         "Start"
     );
 
-    let attempt = match decode_source_code(&code) {
-        Ok(source) => run(task_id.clone(), submission_id, source, language).await,
-        Err(err) => Err(err),
-    };
+    let task_id_clone = task_id.clone();
+    let attempt = tokio::task::spawn_blocking(move || {
+        decode_source_code(&code)
+            .and_then(|source| run(task_id_clone, submission_id, source, language))
+    })
+    .await
+    .unwrap_or_else(|e| Err(anyhow::anyhow!("Judge task panicked: {e}")));
 
     match attempt {
         Ok(judge_result) => {
