@@ -52,8 +52,8 @@ tasks/<task_id>/
 | `checker` | `string` | Binary name of the validator located in `./checker/` (must be one of: `fcmp`, `hcmp`, `lcmp`, `ncmp`, `rcmp4`, `rcmp6`, `rcmp9`, `wcmp`, `yesno`). |
 | `skip` | `boolean` | If `true`, stops evaluating subsequent testcases in a subtask immediately upon the first non-OK verdict. |
 | `full_score` | `integer` | Total maximum score awarded for passing all testcases (typically `100`). |
-| `num_testcases` | `integer` | Total count of testcases (`1` through `N`). All matching `.in` and `.sol` files must exist. |
-| `subtasks` | `array` | List of subtask definitions. Empty `[]` indicates flat uniform scoring across all testcases. |
+| `num_testcases` | `integer` | Total count of testcases (`1` through `N`). Must be greater than `0`. All matching `.in` and `.sol` files must exist. |
+| `subtasks` | `array` | List of subtask definitions (each subtask `num_testcases` must also be $> 0$). Empty `[]` indicates flat uniform scoring across all testcases. |
 
 ---
 
@@ -229,7 +229,7 @@ curl -X POST http://localhost:5000/api/tasks/a_plus_b \
   -F "testcases.zip=@tasks/a_plus_b/testcases.zip"
 ```
 
-The API validates the task ID (`^[a-zA-Z0-9_-]+$`), sanitizes multipart filenames against path traversal, validates `manifest.json` against the allowed checker allowlist, and safely extracts `testcases.zip` into `tasks/a_plus_b/testcases/` (enforcing limits of max 1,000 files, max 256 MB uncompressed, and strict entry path containment).
+The API validates the task ID (`^[a-zA-Z0-9_-]+$`), sanitizes multipart filenames against path traversal, validates `manifest.json` (requiring `num_testcases > 0` and checkers in `ALLOWED_CHECKERS`), and safely extracts `testcases.zip` into `tasks/a_plus_b/testcases/` (enforcing limits of max 1,000 files, max 256 MB uncompressed, and strict entry path containment).
 
 ### Method B: Via Database Registration
 

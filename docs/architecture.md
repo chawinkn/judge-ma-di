@@ -15,7 +15,7 @@ flowchart LR
         API["HTTP API (`judge-api`)\n(Task Management)"]
         Storage[("Task Storage\n(`tasks/` Directory)")]
         Worker["Judge Worker (`judge-worker`)\n(Evaluation Engine)"]
-        CompileBox["Isolate Box (`box_id + 1000`)\n(Sandboxed Compiler)"]
+        CompileBox["Isolate Box (`box_id + 500`)\n(Sandboxed Compiler)"]
         RunBox["Isolate Box (`box_id`)\n(Execution & Checker)"]
     end
 
@@ -72,7 +72,7 @@ sequenceDiagram
                 Note over W: Log: "Finished" { status: "Testcases Error" }
             else Testcases present
                 %% Step 1: Sandboxed Compilation
-                W->>CB: isolate --box-id=(id+1000) --init
+                W->>CB: isolate --box-id=(id+500) --init
                 W->>CB: isolate --run -- /usr/bin/g++ ... source.cpp -o source
                 
                 alt Compilation Failed
@@ -191,7 +191,7 @@ The database uses PostgreSQL 17 with two core tables defined in `scripts/init.sq
 ### C. Dedicated Isolate Sandbox for Compilation
 * **The issue**: `g++` compilation peaks at ~75 MB of memory. Linux cgroup v2 tracks the lifetime peak memory of that cgroup slice (`memory.peak`).
 * **Why it matters**: Compiling in the execution box inflates `memory.peak` to ~75 MB. When the student binary runs, Isolate checks the cgroup peak and triggers a false Memory Limit Exceeded (MLE) on tasks with a smaller limit (e.g. 16 MB).
-* **The fix**: We compile in a temporary sandbox (`box_id + 1000`), copy the output executable to a clean sandbox (`box_id`), and run testcases. Testcase memory reflects only the user binary (~1 MB for C++).
+* **The fix**: We compile in a temporary sandbox (`box_id + 500`), copy the output executable to a clean sandbox (`box_id = submission_id % 500`), and run testcases. This guarantees box IDs stay strictly within Isolate's valid `0..=999` range while preventing ID collisions. Testcase memory reflects only the user binary (~1 MB for C++).
 
 ### D. Local Filesystem Storage over S3 / MinIO
 * **Low-latency I/O**: Isolate runners and checkers read testcases directly from local disk. Zero network hop during judging.
@@ -203,3 +203,12 @@ The database uses PostgreSQL 17 with two core tables defined in `scripts/init.sq
 * **Zero polling spam**: Silences `tokio_postgres` 1-second query logs in production, preventing log pollution.
 * **Lifecycle events only**: Emits concise `Start` and `Finished` logs with `submission_id`, `task_id`, and `status`. Detailed testcase breakdowns and metrics remain stored in the database.
 * **Local DX**: In development (`APP_ENV=development`), outputs human-readable colored text with full debug logs.
+
+### F. Sandbox Security & Fault Tolerance
+* **RAII Sandbox Resource Cleanup**: `Isolate` implements `Drop` to guarantee sandbox directories and cgroups are unconditionally cleaned up even on mid-run errors or panics.
+* **Safe Sandbox Metadata Placement**: Execution metadata (`meta.txt`) is stored outside the untrusted `box/` directory in the sandbox parent root, preventing untrusted code from tampering with or creating directories colliding with `meta.txt`.
+* **Bounded Checker Execution**: Checkers are wrapped with a 10-second timeout (`/usr/bin/timeout 10`) on the host to prevent hanging or malicious testlib checkers from locking worker threads.
+* **Resilient Worker Polling**: Database connection pool dropouts and transient query errors are caught and retried with exponential backoff rather than terminating the process with `exit(1)`.
+* **Non-Blocking Runtime Offloading**: Synchronous judging execution ([`runner::run`](file:///mnt/c/Users/sitti/judge-ma-di/src/judge/runner.rs)) is offloaded via `tokio::task::spawn_blocking`, ensuring subprocess calls and disk I/O never starve Tokio async threads or stall Axum HTTP endpoints.
+
+
