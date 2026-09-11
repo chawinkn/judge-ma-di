@@ -30,11 +30,27 @@ pub async fn run_worker(pool: Pool) -> Result<()> {
     let poll_interval = poll_interval();
 
     loop {
-        let db_client = pool.get().await?;
+        let db_client = match pool.get().await {
+            Ok(client) => client,
+            Err(err) => {
+                error!(error = %err, "Failed to get DB connection from pool, retrying");
+                sleep(poll_interval).await;
+                continue;
+            }
+        };
 
-        match poll_next_submission(&db_client).await? {
-            Some(polled) => judge_and_writeback(&db_client, polled).await?,
-            None => {
+        match poll_next_submission(&db_client).await {
+            Ok(Some(polled)) => {
+                if let Err(err) = judge_and_writeback(&db_client, polled).await {
+                    error!(error = %err, "Failed to judge or write back submission");
+                }
+            }
+            Ok(None) => {
+                drop(db_client);
+                sleep(poll_interval).await;
+            }
+            Err(err) => {
+                error!(error = %err, "Failed to poll queued submissions, retrying");
                 drop(db_client);
                 sleep(poll_interval).await;
             }
