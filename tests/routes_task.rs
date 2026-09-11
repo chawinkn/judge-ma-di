@@ -101,3 +101,19 @@ fn test_manifest_validation_rejects_bad_checker() {
     let task_config = parsed.unwrap();
     assert!(validate_checker(&task_config.checker).is_err());
 }
+
+#[test]
+fn test_manifest_validation_zero_testcases() {
+    let manifest_zero = br#"{
+        "time_limit": 1.0,
+        "memory_limit": 256,
+        "checker": "lcmp",
+        "skip": false,
+        "full_score": 100,
+        "num_testcases": 0,
+        "subtasks": []
+    }"#;
+
+    let parsed: TaskConfig = serde_json::from_slice(manifest_zero).unwrap();
+    assert_eq!(parsed.num_testcases, 0);
+}

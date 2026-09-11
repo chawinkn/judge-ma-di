@@ -67,12 +67,32 @@ pub fn get_language_config(language: &str) -> Result<LanguageConfig, AppError> {
         .ok_or_else(|| AppError::BadRequest("Unsupported Language".to_string()))
 }
 
+pub fn validate_task_id(task_id: &str) -> Result<(), AppError> {
+    if task_id.is_empty()
+        || !task_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err(AppError::BadRequest("invalid task_id".to_string()));
+    }
+    Ok(())
+}
+
 pub fn get_task_config(task_id: &str) -> Result<TaskConfig, AppError> {
+    validate_task_id(task_id)?;
     let task_config_data = fs::read_to_string(format!("tasks/{task_id}/manifest.json"))
         .map_err(|_| AppError::NotFound("Task id not found".to_string()))?;
     let task_config: TaskConfig =
         serde_json::from_str(&task_config_data).context("Failed to parse manifest.json")?;
     validate_checker(&task_config.checker)?;
+
+    if (task_config.num_testcases == 0 && task_config.subtasks.is_empty())
+        || task_config.subtasks.iter().any(|s| s.num_testcases == 0)
+    {
+        return Err(AppError::BadRequest(
+            "Task and subtasks must have at least 1 testcase".to_string(),
+        ));
+    }
 
     Ok(task_config)
 }

@@ -68,16 +68,7 @@ pub fn safe_extract_zip(data: &[u8], target: &std::path::Path) -> Result<(), App
     res
 }
 
-pub fn validate_task_id(task_id: &str) -> Result<(), AppError> {
-    if task_id.is_empty()
-        || !task_id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-    {
-        return Err(AppError::BadRequest("invalid task_id".to_string()));
-    }
-    Ok(())
-}
+pub use crate::judge::config::validate_task_id;
 
 pub async fn get_task_testcases(
     Path(task_id): Path<String>,
@@ -130,6 +121,19 @@ pub async fn upload_task(
             let manifest: TaskConfig = serde_json::from_slice(&data)
                 .map_err(|e| AppError::BadRequest(format!("Invalid manifest.json: {e}")))?;
             validate_checker(&manifest.checker)?;
+            if manifest.num_testcases == 0 {
+                return Err(AppError::BadRequest(
+                    "num_testcases must be greater than 0".to_string(),
+                ));
+            }
+            for (i, subtask) in manifest.subtasks.iter().enumerate() {
+                if subtask.num_testcases == 0 {
+                    return Err(AppError::BadRequest(format!(
+                        "subtask {} num_testcases must be greater than 0",
+                        i + 1
+                    )));
+                }
+            }
         }
 
         tokio::fs::write(format!("{dir}/{safe_name}"), &data).await?;
