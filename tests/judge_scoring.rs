@@ -33,14 +33,14 @@ impl FakeSandbox {
 }
 
 impl Sandbox for FakeSandbox {
-    async fn run(&mut self, _test_index: u64) -> anyhow::Result<IsolateResult> {
+    fn run(&mut self, _test_index: u64) -> anyhow::Result<IsolateResult> {
         Ok(self
             .run_results
             .pop_front()
             .expect("run() called more times than scripted"))
     }
 
-    async fn check(&mut self, _test_index: u64) -> anyhow::Result<bool> {
+    fn check(&mut self, _test_index: u64) -> anyhow::Result<bool> {
         Ok(self
             .check_results
             .pop_front()
@@ -48,30 +48,30 @@ impl Sandbox for FakeSandbox {
     }
 }
 
-#[tokio::test]
-async fn run_each_wrong_answer() {
+#[test]
+fn run_each_wrong_answer() {
     let mut sandbox = FakeSandbox::with_verdicts([RunVerdict::VerdictOK]).checks([false]);
 
-    let result = run_each(&mut sandbox, 50, 0, 1).await.unwrap();
+    let result = run_each(&mut sandbox, 50, 0, 1).unwrap();
 
     assert_eq!(result.status, RunStatus::WrongAnswer);
     assert_eq!(result.score, 0);
 }
 
-#[tokio::test]
-async fn run_each_skips_checker_on_bad_verdict() {
+#[test]
+fn run_each_skips_checker_on_bad_verdict() {
     // No entries in check_results - a check() call here would panic, so this
     // also proves the checker is skipped entirely for a non-OK verdict.
     let mut sandbox = FakeSandbox::with_verdicts([RunVerdict::VerdictTLE]);
 
-    let result = run_each(&mut sandbox, 50, 0, 1).await.unwrap();
+    let result = run_each(&mut sandbox, 50, 0, 1).unwrap();
 
     assert_eq!(result.status, RunStatus::Verdict(RunVerdict::VerdictTLE));
     assert_eq!(result.score, 0);
 }
 
-#[tokio::test]
-async fn run_normal_partial_score() {
+#[test]
+fn run_normal_partial_score() {
     // Unlike subtasks, flat scoring isn't all-or-nothing: testcase 1 and 4
     // keep their score even though 2 and 3 fail.
     let mut sandbox = FakeSandbox::with_verdicts([
@@ -82,7 +82,7 @@ async fn run_normal_partial_score() {
     ])
     .checks([true, false, true]);
 
-    let result = run_normal(&mut sandbox, 100, 4).await.unwrap();
+    let result = run_normal(&mut sandbox, 100, 4).unwrap();
 
     assert_eq!(result.result.len(), 4);
     assert_eq!(result.result[0].score, 25);
@@ -92,8 +92,8 @@ async fn run_normal_partial_score() {
     assert_eq!(result.score, 50);
 }
 
-#[tokio::test]
-async fn run_normal_time_memory_max() {
+#[test]
+fn run_normal_time_memory_max() {
     let mut sandbox = FakeSandbox {
         run_results: VecDeque::from([
             IsolateResult {
@@ -110,14 +110,14 @@ async fn run_normal_time_memory_max() {
         check_results: VecDeque::from([true, true]),
     };
 
-    let result = run_normal(&mut sandbox, 100, 2).await.unwrap();
+    let result = run_normal(&mut sandbox, 100, 2).unwrap();
 
     assert_eq!(result.time, 500); // 0.5s -> 500ms, the slower of the two
     assert_eq!(result.memory, 1000); // the larger of the two
 }
 
-#[tokio::test]
-async fn subtasks_skip_zeroes_rest() {
+#[test]
+fn subtasks_skip_zeroes_rest() {
     let mut sandbox = FakeSandbox::with_verdicts([RunVerdict::VerdictOK, RunVerdict::VerdictOK])
         .checks([true, false]);
     let subtasks = vec![Subtask {
@@ -125,7 +125,7 @@ async fn subtasks_skip_zeroes_rest() {
         num_testcases: 3,
     }];
 
-    let result = run_subtask(&mut sandbox, subtasks, true).await.unwrap();
+    let result = run_subtask(&mut sandbox, subtasks, true).unwrap();
 
     assert_eq!(result.result.len(), 3);
     assert_eq!(
@@ -141,8 +141,8 @@ async fn subtasks_skip_zeroes_rest() {
     assert_eq!(result.score, 0);
 }
 
-#[tokio::test]
-async fn subtasks_no_skip_runs_rest() {
+#[test]
+fn subtasks_no_skip_runs_rest() {
     let mut sandbox = FakeSandbox::with_verdicts([
         RunVerdict::VerdictOK,
         RunVerdict::VerdictOK,
@@ -154,7 +154,7 @@ async fn subtasks_no_skip_runs_rest() {
         num_testcases: 3,
     }];
 
-    let result = run_subtask(&mut sandbox, subtasks, false).await.unwrap();
+    let result = run_subtask(&mut sandbox, subtasks, false).unwrap();
 
     // all 3 actually ran (no Skipped) - proves use_skip=false disables the
     // short-circuit rather than just changing the Skipped label.
@@ -164,8 +164,8 @@ async fn subtasks_no_skip_runs_rest() {
     assert_eq!(result.score, 0);
 }
 
-#[tokio::test]
-async fn subtasks_independent_scoring() {
+#[test]
+fn subtasks_independent_scoring() {
     let mut sandbox = FakeSandbox::with_verdicts([
         RunVerdict::VerdictOK, // subtask 1, testcase 1: fails
         RunVerdict::VerdictOK, // subtask 2, testcase 1: passes
@@ -183,7 +183,7 @@ async fn subtasks_independent_scoring() {
         },
     ];
 
-    let result = run_subtask(&mut sandbox, subtasks, true).await.unwrap();
+    let result = run_subtask(&mut sandbox, subtasks, true).unwrap();
 
     assert_eq!(result.score, 70);
     assert_eq!(result.result[0].subtask_index, 1);

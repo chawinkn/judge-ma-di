@@ -12,27 +12,24 @@ fn encode_source_code(source: &str) -> Vec<u8> {
     compressor.into_inner()
 }
 
-async fn test_pool() -> Option<Pool> {
+async fn test_pool() -> anyhow::Result<Pool> {
     let url = std::env::var("POSTGRES_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@127.0.0.1:5432/postgres".to_string());
-    let cfg = tokio_postgres::Config::from_str(&url).ok()?;
+    let cfg = tokio_postgres::Config::from_str(&url)?;
     let mgr = Manager::new(cfg, NoTls);
-    let pool = Pool::builder(mgr).max_size(2).build().ok()?;
-    let client = pool.get().await.ok()?;
-    client.execute("SELECT 1", &[]).await.ok()?;
-    client
+    let pool = Pool::builder(mgr).max_size(2).build()?;
+    pool.get()
+        .await?
         .batch_execute(include_str!("../../scripts/init.sql"))
-        .await
-        .ok()?;
-    Some(pool)
+        .await?;
+    Ok(pool)
 }
 
 #[tokio::test]
 async fn test_db_queue_lifecycle_atomic_claim_and_writeback() {
-    let pool = match test_pool().await {
-        Some(p) => p,
-        None => return,
-    };
+    let pool = test_pool()
+        .await
+        .expect("PostgreSQL must be running on POSTGRES_URL to run db_queue integration tests");
     let client = pool.get().await.unwrap();
 
     // 1. Queue 2 submissions
