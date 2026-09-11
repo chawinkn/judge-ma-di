@@ -3,8 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
     path::PathBuf,
+    process::Command,
 };
-use tokio::process::Command;
+
+use crate::judge::config::validate_checker;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum RunVerdict {
@@ -42,6 +44,7 @@ pub struct Isolate {
     pub run_script: String,
     pub checker: String,
     pub testcases_dir: PathBuf,
+    pub initialized: bool,
 }
 
 #[derive(Default, PartialEq, Debug)]
@@ -52,16 +55,22 @@ pub struct IsolateResult {
 }
 
 impl Isolate {
-    pub async fn init(&mut self) -> Result<()> {
+    pub fn init(&mut self) -> Result<()> {
         let box_path = Command::new("isolate")
             .arg("--cg")
             .arg(format!("--box-id={}", self.box_id))
             .arg("--init")
-            .output()
-            .await?;
+            .output()?;
 
-        let box_path = String::from_utf8(box_path.stdout)?;
-        self.box_path = PathBuf::from(box_path.trim()).join("box");
+        anyhow::ensure!(
+            box_path.status.success(),
+            "Failed to init isolate box {}: {}",
+            self.box_id,
+            String::from_utf8_lossy(&box_path.stderr)
+        );
+
+        self.box_path = PathBuf::from(String::from_utf8(box_path.stdout)?.trim()).join("box");
+        self.initialized = true;
 
         fs::write(
             self.box_path.join(format!("source.{}", self.ext)),
@@ -71,74 +80,103 @@ impl Isolate {
         Ok(())
     }
 
-    pub async fn compile(&mut self) -> Result<IsolateResult> {
-        let compile_box_id = self.box_id + 1000;
+    pub fn compile(&mut self) -> Result<IsolateResult> {
+        let compile_box_id = self.box_id + 500;
         let box_path = Command::new("isolate")
             .arg("--cg")
             .arg(format!("--box-id={compile_box_id}"))
             .arg("--init")
-            .output()
-            .await?;
+            .output()?;
+
+        anyhow::ensure!(
+            box_path.status.success(),
+            "Failed to init compile isolate box {compile_box_id}: {}",
+            String::from_utf8_lossy(&box_path.stderr)
+        );
 
         let compile_box = PathBuf::from(String::from_utf8(box_path.stdout)?.trim()).join("box");
         let source_file = format!("source.{}", self.ext);
-        fs::write(compile_box.join(&source_file), &self.code)?;
 
-        let compile_script = self
-            .compile_script
-            .replace("{source_file}", &source_file)
-            .replace("{output}", "source");
+        let res = (|| -> Result<RunVerdict> {
+            fs::write(compile_box.join(&source_file), &self.code)?;
 
-        let output = Command::new("isolate")
-            .arg("--cg")
-            .arg(format!("--box-id={compile_box_id}"))
-            .arg("--time=10")
-            .arg("--wall-time=15")
-            .arg("--extra-time=1")
-            .arg("--cg-mem=1048576")
-            .arg("--processes=128")
-            .arg("--env=PATH=/usr/bin:/bin")
-            .arg("--run")
-            .arg("--")
-            .args(compile_script.split(' '))
-            .output()
-            .await?;
+            let compile_script = self
+                .compile_script
+                .replace("{source_file}", &source_file)
+                .replace("{output}", "source");
 
-        let status = if output.status.success() {
-            let compiled_bin = compile_box.join("source");
-            if compiled_bin.exists() {
-                fs::copy(&compiled_bin, self.box_path.join("source"))?;
+            let output = Command::new("isolate")
+                .arg("--cg")
+                .arg(format!("--box-id={compile_box_id}"))
+                .arg("--time=10")
+                .arg("--wall-time=15")
+                .arg("--extra-time=1")
+                .arg("--cg-mem=1048576")
+                .arg("--processes=128")
+                .arg("--env=PATH=/usr/bin:/bin")
+                .arg("--run")
+                .arg("--")
+                .args(compile_script.split(' '))
+                .output()?;
+
+            if output.status.success() {
+                let compiled_bin = compile_box.join("source");
+                if compiled_bin.exists() {
+                    fs::copy(&compiled_bin, self.box_path.join("source"))?;
+                }
+                Ok(RunVerdict::VerdictOK)
+            } else {
+                Ok(RunVerdict::CompilationError)
             }
-            RunVerdict::VerdictOK
-        } else {
-            RunVerdict::CompilationError
-        };
+        })();
 
         let _ = Command::new("isolate")
             .arg("--cg")
             .arg(format!("--box-id={compile_box_id}"))
             .arg("--cleanup")
-            .output()
-            .await;
+            .output();
 
         Ok(IsolateResult {
-            status,
+            status: res?,
             ..Default::default()
         })
     }
 
-    pub async fn check(&mut self, test_index: u64) -> Result<bool> {
-        let result = Command::new(format!("checker/{}", self.checker))
+    pub fn check(&mut self, test_index: u64) -> Result<bool> {
+        validate_checker(&self.checker).map_err(anyhow::Error::msg)?;
+
+        let output = Command::new("timeout")
+            .arg("10")
+            .arg(format!("checker/{}", self.checker))
             .arg(self.testcases_dir.join(format!("{}.in", test_index)))
             .arg(self.box_path.join("out.out"))
             .arg(self.testcases_dir.join(format!("{}.sol", test_index)))
-            .output()
-            .await?;
+            .output()?;
 
-        Ok(result.stdout == b"Correct\n100\n")
+        anyhow::ensure!(
+            output.status.code() != Some(124),
+            "Checker execution timed out after 10 seconds"
+        );
+
+        let is_correct = if output.stdout.starts_with(b"Correct\n100") {
+            true
+        } else if output.stdout.starts_with(b"Incorrect") {
+            false
+        } else {
+            output.status.success() && output.stdout.is_empty()
+        };
+
+        Ok(is_correct)
     }
 
-    pub async fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
+    pub fn meta_path(&self) -> PathBuf {
+        self.box_path
+            .parent()
+            .unwrap_or(&self.box_path)
+            .join("meta.txt")
+    }
+
+    pub fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
         let run_script = self.run_script.replace("{source}", "source");
         let input_file = File::open(self.testcases_dir.join(format!("{}.in", test_index)))?;
 
@@ -149,15 +187,14 @@ impl Isolate {
             .arg(format!("--wall-time={}", (self.time_limit + 5.0)))
             .arg(format!("--extra-time={}", (self.time_limit + 1.0)))
             .arg(format!("--cg-mem={}", self.memory_limit))
-            .arg(format!("--meta={}/meta.txt", self.box_path.display()))
+            .arg(format!("--meta={}", self.meta_path().display()))
             .stdin(input_file)
             .arg("--stdout=out.out")
             .arg("--processes=128")
             .arg("--run")
             .arg("--")
             .args(run_script.split(' '))
-            .output()
-            .await?;
+            .output()?;
 
         let result = self.get_result()?;
 
@@ -168,7 +205,7 @@ impl Isolate {
         let mut result: IsolateResult = Default::default();
         let mut memory_limit_exceeded = false;
 
-        let meta = fs::read_to_string(format!("{}/meta.txt", self.box_path.display()))?;
+        let meta = fs::read_to_string(self.meta_path())?;
 
         for meta_line in meta.lines() {
             if let Some((key, val)) = meta_line.split_once(':') {
@@ -196,15 +233,25 @@ impl Isolate {
         Ok(result)
     }
 
-    pub async fn cleanup(&mut self) -> Result<()> {
-        Command::new("isolate")
-            .arg("--cg")
-            .arg(format!("--box-id={}", self.box_id))
-            .arg("--cleanup")
-            .output()
-            .await?;
+    pub fn cleanup(&mut self) -> Result<()> {
+        if self.initialized {
+            self.initialized = false;
+            Command::new("isolate")
+                .arg("--cg")
+                .arg(format!("--box-id={}", self.box_id))
+                .arg("--cleanup")
+                .output()?;
+        }
 
         Ok(())
+    }
+}
+
+impl Drop for Isolate {
+    fn drop(&mut self) {
+        if let Err(err) = self.cleanup() {
+            tracing::warn!(box_id = self.box_id, error = %err, "Failed to cleanup isolate sandbox");
+        }
     }
 }
 
@@ -212,19 +259,16 @@ impl Isolate {
 /// needs from a sandbox. Lets that logic be tested with a fake instead of
 /// requiring a real isolate CLI + cgroups on the test host.
 pub trait Sandbox {
-    fn run(
-        &mut self,
-        test_index: u64,
-    ) -> impl std::future::Future<Output = Result<IsolateResult>> + Send;
-    fn check(&mut self, test_index: u64) -> impl std::future::Future<Output = Result<bool>> + Send;
+    fn run(&mut self, test_index: u64) -> Result<IsolateResult>;
+    fn check(&mut self, test_index: u64) -> Result<bool>;
 }
 
 impl Sandbox for Isolate {
-    async fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
-        Isolate::run(self, test_index).await
+    fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
+        Isolate::run(self, test_index)
     }
 
-    async fn check(&mut self, test_index: u64) -> Result<bool> {
-        Isolate::check(self, test_index).await
+    fn check(&mut self, test_index: u64) -> Result<bool> {
+        Isolate::check(self, test_index)
     }
 }

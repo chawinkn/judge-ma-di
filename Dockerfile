@@ -29,10 +29,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # master branch required: cgroup v2 not in released tags
-RUN wget -qO- https://github.com/ioi/isolate/archive/master.tar.gz | tar -xz -C /tmp \
-    && make -C /tmp/isolate-master isolate \
-    && make -C /tmp/isolate-master install \
-    && rm -rf /tmp/isolate-master
+RUN git clone --depth=1 https://github.com/ioi/isolate.git /tmp/isolate \
+    && make -C /tmp/isolate isolate \
+    && make -C /tmp/isolate install \
+    && rm -rf /tmp/isolate
 
 # isolate --cg requires subuid/subgid range
 RUN useradd -r isolate \

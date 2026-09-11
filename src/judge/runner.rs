@@ -67,13 +67,14 @@ pub enum RunStatus {
 }
 
 pub fn is_testcases_error(task_path: &Path, num_testcases: u64) -> bool {
-    (1..=num_testcases).any(|i| {
-        fs::metadata(task_path.join(format!("{}.in", i))).is_err()
-            || fs::metadata(task_path.join(format!("{}.sol", i))).is_err()
-    })
+    num_testcases == 0
+        || (1..=num_testcases).any(|i| {
+            fs::metadata(task_path.join(format!("{}.in", i))).is_err()
+                || fs::metadata(task_path.join(format!("{}.sol", i))).is_err()
+        })
 }
 
-pub async fn run(
+pub fn run(
     task_id: String,
     submission_id: u64,
     code: String,
@@ -95,7 +96,7 @@ pub async fn run(
 
     let mut isolate = Isolate {
         box_path: PathBuf::new(),
-        box_id: submission_id % 1000,
+        box_id: submission_id % 500,
         time_limit: task_config.time_limit,
         memory_limit: task_config.memory_limit * 1000,
         code,
@@ -104,18 +105,17 @@ pub async fn run(
         run_script: language_config.run,
         checker: task_config.checker,
         testcases_dir,
+        initialized: false,
     };
 
-    isolate.init().await?;
-    let compile_result = isolate.compile().await?;
+    isolate.init()?;
+    let compile_result = isolate.compile()?;
 
     if compile_result.status == RunVerdict::CompilationError {
         let judge_result = JudgeResult {
             status: JudgeStatus::CompilationError,
             ..Default::default()
         };
-
-        isolate.cleanup().await?;
 
         return Ok(judge_result);
     }
@@ -129,17 +129,14 @@ pub async fn run(
             task_config.full_score,
             task_config.num_testcases,
         )
-        .await
     } else {
-        run_subtask(&mut isolate, subtasks, use_skip).await
+        run_subtask(&mut isolate, subtasks, use_skip)
     }?;
-
-    isolate.cleanup().await?;
 
     Ok(judge_result)
 }
 
-pub async fn run_each<S: Sandbox>(
+pub fn run_each<S: Sandbox>(
     isolate: &mut S,
     score: u64,
     subtask_index: u64,
@@ -148,9 +145,9 @@ pub async fn run_each<S: Sandbox>(
     let mut score = score;
     let mut correct = true;
 
-    let isolate_result = isolate.run(test_index).await?;
+    let isolate_result = isolate.run(test_index)?;
     if isolate_result.status == RunVerdict::VerdictOK {
-        if !isolate.check(test_index).await? {
+        if !isolate.check(test_index)? {
             score = 0;
             correct = false;
         }
@@ -174,7 +171,7 @@ pub async fn run_each<S: Sandbox>(
     })
 }
 
-pub async fn run_normal<S: Sandbox>(
+pub fn run_normal<S: Sandbox>(
     isolate: &mut S,
     full_score: u64,
     num_testcases: u64,
@@ -186,7 +183,7 @@ pub async fn run_normal<S: Sandbox>(
     let score = full_score / num_testcases;
 
     for test_index in 1..=num_testcases {
-        let run_result = run_each(isolate, score, 0, test_index).await?;
+        let run_result = run_each(isolate, score, 0, test_index)?;
 
         judge_result.score += run_result.score;
         judge_result.memory = cmp::max(judge_result.memory, run_result.memory);
@@ -198,7 +195,7 @@ pub async fn run_normal<S: Sandbox>(
     Ok(judge_result)
 }
 
-pub async fn run_subtask<S: Sandbox>(
+pub fn run_subtask<S: Sandbox>(
     isolate: &mut S,
     subtasks: Vec<Subtask>,
     use_skip: bool,
@@ -215,6 +212,9 @@ pub async fn run_subtask<S: Sandbox>(
     let mut test_index = 1;
 
     for (subtask_index, subtask) in (1..).zip(&subtasks) {
+        if subtask.num_testcases == 0 {
+            continue;
+        }
         let mut correct_all = true;
         let mut skipped = false;
         let mut subtask_result = Vec::with_capacity(subtask.num_testcases as usize);
@@ -231,7 +231,7 @@ pub async fn run_subtask<S: Sandbox>(
                     memory: 0,
                 });
             } else {
-                let run_result = run_each(isolate, score, subtask_index, test_index).await?;
+                let run_result = run_each(isolate, score, subtask_index, test_index)?;
 
                 if run_result.score == 0 {
                     correct_all = false;

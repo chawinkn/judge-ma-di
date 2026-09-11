@@ -69,7 +69,7 @@ paths:
 
     post:
       summary: Upload task assets
-      description: Multipart upload. Any `.zip` file is extracted into `testcases/`. Max payload 10 MB.
+      description: Multipart upload. Any `.zip` file is extracted into `testcases/`. `manifest.json` is validated (including strict checker allowlist). Max payload 10 MB.
       operationId: uploadTask
       parameters:
         - name: id
@@ -105,7 +105,7 @@ paths:
               example:
                 code: "OK"
         '400':
-          description: Bad request (missing filename, invalid multipart, or corrupted zip)
+          description: Bad request (missing filename, invalid multipart, corrupted zip, or invalid manifest/checker)
           content:
             application/json:
               schema:
@@ -301,7 +301,17 @@ components:
           example: 256
         checker:
           type: string
-          description: Testlib binary name in checker/
+          enum:
+            - fcmp
+            - hcmp
+            - lcmp
+            - ncmp
+            - rcmp4
+            - rcmp6
+            - rcmp9
+            - wcmp
+            - yesno
+          description: Allowed Testlib binary name in checker/
           example: "lcmp"
         skip:
           type: boolean

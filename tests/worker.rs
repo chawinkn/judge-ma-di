@@ -53,3 +53,37 @@ fn decodes_a_typical_python_solution() {
 
     assert_eq!(decode_source_code(&compressed).unwrap(), source);
 }
+
+#[test]
+fn errors_on_brotli_bomb_exceeding_10mb() {
+    // 11 MB of repeated characters compresses to small brotli payload
+    let large_code = "a".repeat(11 * 1024 * 1024);
+    let compressed = compress_json(&large_code);
+
+    let err = decode_source_code(&compressed).unwrap_err();
+    assert!(err.to_string().contains("exceeds maximum size"));
+}
+
+#[tokio::test]
+async fn run_worker_retries_on_pool_error_without_exiting() {
+    let cfg = "postgres://postgres:postgres@127.0.0.1:1/postgres"
+        .parse()
+        .unwrap();
+    let mgr = deadpool_postgres::Manager::new(cfg, tokio_postgres::NoTls);
+    let pool = deadpool_postgres::Pool::builder(mgr)
+        .max_size(1)
+        .build()
+        .unwrap();
+
+    std::env::set_var("POLL_INTERVAL_MS", "10");
+
+    let res = tokio::time::timeout(
+        std::time::Duration::from_millis(60),
+        judge_ma_di::worker::run_worker(pool),
+    )
+    .await;
+    assert!(
+        res.is_err(),
+        "run_worker should not exit on transient DB connection failure"
+    );
+}

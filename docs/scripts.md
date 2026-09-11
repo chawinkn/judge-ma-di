@@ -48,7 +48,22 @@ Overview of the shell and SQL scripts in [`scripts/`](../scripts/).
   * Executed automatically by PostgreSQL on initial container creation via `/docker-entrypoint-initdb.d/init.sql`.
   * Embedded in Rust integration tests via `include_str!("../../scripts/init.sql")` to bootstrap ephemeral test databases.
 * **Key Components**:
-  * **`task`**: Problem metadata (`id`, `title`, `full_score`, `private`).
-  * **`submission`**: Submission records and evaluation results (`id`, `task_id`, `status`, `code`, `language`, `score`, `time`, `memory`, `result`).
+  * **`task` Table**:
+    * `id` (`TEXT PRIMARY KEY`): Unique task identifier (e.g. `'a_plus_b'`).
+    * `title` (`TEXT NOT NULL DEFAULT ''`): Problem title.
+    * `full_score` (`INTEGER NOT NULL DEFAULT 100`): Maximum score.
+    * `private` (`BOOLEAN NOT NULL DEFAULT FALSE`): Problem privacy/visibility toggle.
+  * **`submission` Table**:
+    * `id` (`SERIAL PRIMARY KEY`): Auto-incrementing submission ID.
+    * `task_id` (`TEXT NOT NULL`): Foreign key reference to task directory `tasks/<task_id>/`.
+    * `status` (`TEXT NOT NULL DEFAULT 'In Queue'`): Status lifecycle (`'In Queue'`, `'Judging'`, `'Completed'`, `'Compilation Error'`, `'Testcases Error'`, `'Judge Error'`).
+    * `submitted_at` (`TIMESTAMPTZ DEFAULT NOW()`): Submission timestamp.
+    * `time` (`INTEGER NOT NULL DEFAULT 0`): Max runtime across testcases in milliseconds (ms).
+    * `memory` (`INTEGER NOT NULL DEFAULT 0`): Max memory across testcases in kilobytes (KB).
+    * `code` (`BYTEA NOT NULL`): Brotli-compressed JSON source code (`string` or `string[]`).
+    * `score` (`INTEGER NOT NULL DEFAULT 0`): Evaluated score out of `full_score`.
+    * `result` (`JSONB NOT NULL DEFAULT '[]'::jsonb`): Per-testcase JSON array of `RunResult` records.
+    * `language` (`TEXT NOT NULL`): Language identifier matching `config.json` (`"cpp"`, `"c"`, `"python"`).
+    * `private` (`BOOLEAN NOT NULL DEFAULT FALSE`): Private submission flag.
   * **`idx_submission_queue`**: Partial index on `(submitted_at ASC, id ASC) WHERE status = 'In Queue'`, optimizing FIFO queue polling with `FOR UPDATE SKIP LOCKED`.
-  * **Seed fixture**: Inserts default problem `'a_plus_b'` if not present.
+  * **Seed fixture**: Inserts default problem `'a_plus_b'` (`title: 'A + B Problem'`, `full_score: 100`) if not present.

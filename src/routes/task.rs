@@ -5,15 +5,75 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use std::io::Cursor;
-use std::path::PathBuf;
+use std::io::{Cursor, Read};
 
 use crate::error::{json_response, AppError, ResponseCode};
-use crate::judge::config::get_task_config;
+use crate::judge::config::{get_task_config, validate_checker, TaskConfig};
+
+const MAX_ZIP_TOTAL_SIZE: u64 = 256 * 1024 * 1024; // 256 MB
+const MAX_ZIP_FILES: usize = 1000;
+
+pub fn safe_extract_zip(data: &[u8], target: &std::path::Path) -> Result<(), AppError> {
+    let extract = || -> Result<(), AppError> {
+        let mut archive = zip::ZipArchive::new(Cursor::new(data))
+            .map_err(|e| AppError::BadRequest(format!("Invalid zip archive: {e}")))?;
+
+        if archive.len() > MAX_ZIP_FILES {
+            return Err(AppError::BadRequest(format!(
+                "Zip contains too many files (max: {MAX_ZIP_FILES})"
+            )));
+        }
+
+        let mut total_uncompressed_bytes: u64 = 0;
+
+        for i in 0..archive.len() {
+            let mut file = archive
+                .by_index(i)
+                .map_err(|e| AppError::BadRequest(format!("Corrupt zip entry: {e}")))?;
+
+            let enclosed_path = file.enclosed_name().ok_or_else(|| {
+                AppError::BadRequest("Zip entry contains illegal path traversal".to_string())
+            })?;
+
+            let out_path = target.join(enclosed_path);
+
+            if file.is_dir() {
+                std::fs::create_dir_all(&out_path)?;
+            } else {
+                if let Some(parent) = out_path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                let mut outfile = std::fs::File::create(&out_path)?;
+                let mut limited = (&mut file)
+                    .take(MAX_ZIP_TOTAL_SIZE.saturating_sub(total_uncompressed_bytes) + 1);
+                let written = std::io::copy(&mut limited, &mut outfile)?;
+                total_uncompressed_bytes += written;
+
+                if total_uncompressed_bytes > MAX_ZIP_TOTAL_SIZE {
+                    return Err(AppError::BadRequest(format!(
+                        "Zip exceeds maximum uncompressed size of {} MB",
+                        MAX_ZIP_TOTAL_SIZE / (1024 * 1024)
+                    )));
+                }
+            }
+        }
+
+        Ok(())
+    };
+
+    let res = extract();
+    if res.is_err() {
+        let _ = std::fs::remove_dir_all(target);
+    }
+    res
+}
+
+pub use crate::judge::config::validate_task_id;
 
 pub async fn get_task_testcases(
     Path(task_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
+    validate_task_id(&task_id)?;
     let contents = tokio::fs::read(format!("tasks/{task_id}/testcases.zip"))
         .await
         .map_err(|_| AppError::NotFound(format!("Testcases for task '{task_id}' not found")))?;
@@ -30,10 +90,12 @@ pub async fn get_task_testcases(
     ))
 }
 
+// TODO: Auth
 pub async fn upload_task(
     Path(task_id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, AppError> {
+    validate_task_id(&task_id)?;
     let dir = format!("tasks/{task_id}");
     tokio::fs::create_dir_all(&dir).await?;
 
@@ -42,29 +104,53 @@ pub async fn upload_task(
         .await
         .map_err(|e| AppError::BadRequest(e.to_string()))?
     {
-        let name = field
+        let raw_name = field
             .file_name()
-            .ok_or_else(|| AppError::BadRequest("missing filename".to_string()))?
+            .ok_or_else(|| AppError::BadRequest("missing filename".to_string()))?;
+        let safe_name = std::path::Path::new(raw_name)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| AppError::BadRequest("invalid filename".to_string()))?
             .to_string();
         let data = field
             .bytes()
             .await
             .map_err(|e| AppError::BadRequest(e.to_string()))?;
 
-        tokio::fs::write(format!("{dir}/{name}"), &data).await?;
+        if safe_name == "manifest.json" {
+            let manifest: TaskConfig = serde_json::from_slice(&data)
+                .map_err(|e| AppError::BadRequest(format!("Invalid manifest.json: {e}")))?;
+            validate_checker(&manifest.checker)?;
+            if manifest.num_testcases == 0 {
+                return Err(AppError::BadRequest(
+                    "num_testcases must be greater than 0".to_string(),
+                ));
+            }
+            for (i, subtask) in manifest.subtasks.iter().enumerate() {
+                if subtask.num_testcases == 0 {
+                    return Err(AppError::BadRequest(format!(
+                        "subtask {} num_testcases must be greater than 0",
+                        i + 1
+                    )));
+                }
+            }
+        }
 
-        if name.ends_with(".zip") {
+        tokio::fs::write(format!("{dir}/{safe_name}"), &data).await?;
+
+        if safe_name.ends_with(".zip") {
             let target = format!("{dir}/testcases");
             let _ = tokio::fs::remove_dir_all(&target).await;
-            zip_extract::extract(Cursor::new(&data), &PathBuf::from(target), true)
-                .map_err(|e| AppError::BadRequest(format!("Invalid zip archive: {e}")))?;
+            safe_extract_zip(&data, std::path::Path::new(&target))?;
         }
     }
 
     Ok(json_response(ResponseCode::Ok))
 }
 
+// TODO: Auth
 pub async fn delete_task(Path(task_id): Path<String>) -> Result<impl IntoResponse, AppError> {
+    validate_task_id(&task_id)?;
     tokio::fs::remove_dir_all(format!("tasks/{task_id}"))
         .await
         .map_err(|e| match e.kind() {
@@ -77,11 +163,13 @@ pub async fn delete_task(Path(task_id): Path<String>) -> Result<impl IntoRespons
 }
 
 pub async fn get_manifest(Path(task_id): Path<String>) -> Result<impl IntoResponse, AppError> {
+    validate_task_id(&task_id)?;
     let task_config = get_task_config(&task_id)?;
     Ok((StatusCode::OK, Json(task_config)))
 }
 
 pub async fn get_desc(Path(task_id): Path<String>) -> Result<impl IntoResponse, AppError> {
+    validate_task_id(&task_id)?;
     let contents = tokio::fs::read(format!("tasks/{task_id}/desc.pdf"))
         .await
         .map_err(|_| AppError::NotFound(format!("Description for task '{task_id}' not found")))?;

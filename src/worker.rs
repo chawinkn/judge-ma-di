@@ -30,11 +30,27 @@ pub async fn run_worker(pool: Pool) -> Result<()> {
     let poll_interval = poll_interval();
 
     loop {
-        let db_client = pool.get().await?;
+        let db_client = match pool.get().await {
+            Ok(client) => client,
+            Err(err) => {
+                error!(error = %err, "Failed to get DB connection from pool, retrying");
+                sleep(poll_interval).await;
+                continue;
+            }
+        };
 
-        match poll_next_submission(&db_client).await? {
-            Some(polled) => judge_and_writeback(&db_client, polled).await?,
-            None => {
+        match poll_next_submission(&db_client).await {
+            Ok(Some(polled)) => {
+                if let Err(err) = judge_and_writeback(&db_client, polled).await {
+                    error!(error = %err, "Failed to judge or write back submission");
+                }
+            }
+            Ok(None) => {
+                drop(db_client);
+                sleep(poll_interval).await;
+            }
+            Err(err) => {
+                error!(error = %err, "Failed to poll queued submissions, retrying");
                 drop(db_client);
                 sleep(poll_interval).await;
             }
@@ -70,11 +86,19 @@ pub async fn poll_next_submission(db_client: &Client) -> Result<Option<PolledSub
     }))
 }
 
+const MAX_DECOMPRESSED_SOURCE: u64 = 10 * 1024 * 1024; // 10 MB
+
 /// `code` is brotli-compressed JSON. Frontend types it as `string[]` but
 /// real rows store a bare string - both accepted.
 pub fn decode_source_code(compressed: &[u8]) -> Result<String> {
     let mut decompressed = Vec::new();
-    Decompressor::new(compressed, 4096).read_to_end(&mut decompressed)?;
+    Decompressor::new(compressed, 4096)
+        .take(MAX_DECOMPRESSED_SOURCE + 1)
+        .read_to_end(&mut decompressed)?;
+
+    if decompressed.len() as u64 > MAX_DECOMPRESSED_SOURCE {
+        return Err(anyhow!("submission code exceeds maximum size of 10 MB"));
+    }
 
     match serde_json::from_slice(&decompressed)? {
         serde_json::Value::String(code) => Ok(code),
@@ -104,10 +128,13 @@ async fn judge_and_writeback(db_client: &Client, polled: PolledSubmission) -> Re
         "Start"
     );
 
-    let attempt = match decode_source_code(&code) {
-        Ok(source) => run(task_id.clone(), submission_id, source, language).await,
-        Err(err) => Err(err),
-    };
+    let task_id_clone = task_id.clone();
+    let attempt = tokio::task::spawn_blocking(move || {
+        decode_source_code(&code)
+            .and_then(|source| run(task_id_clone, submission_id, source, language))
+    })
+    .await
+    .unwrap_or_else(|e| Err(anyhow::anyhow!("Judge task panicked: {e}")));
 
     match attempt {
         Ok(judge_result) => {
