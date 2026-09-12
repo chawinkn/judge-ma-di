@@ -88,8 +88,7 @@ impl Isolate {
         self.initialized = true;
 
         fs::write(
-            self.box_path
-                .join(format!("source.{}", self.language.ext())),
+            self.box_path.join(self.language.source_filename()),
             &self.code,
         )?;
 
@@ -121,7 +120,7 @@ impl Isolate {
         );
 
         let compile_box = PathBuf::from(String::from_utf8(box_path.stdout)?.trim()).join("box");
-        let source_file = format!("source.{}", self.language.ext());
+        let source_file = self.language.source_filename();
 
         let res = (|| -> Result<RunVerdict> {
             fs::write(compile_box.join(&source_file), &self.code)?;

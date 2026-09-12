@@ -14,6 +14,8 @@ pub struct TaskConfig {
     pub full_score: u64,
     pub num_testcases: u64,
     pub subtasks: Vec<Subtask>,
+    #[serde(default)]
+    pub allowed_languages: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

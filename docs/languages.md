@@ -14,9 +14,10 @@ Rust default method implementations eliminate boilerplate—**adapters only impl
 | :--- | :--- | :--- |
 | `name(&self)` | *Required* | Language identifier string (e.g., `"cpp"`, `"python"`). |
 | `ext(&self)` | *Required* | Source file extension without leading dot (e.g., `"cpp"`, `"py"`). |
+| `source_filename(&self)` | `source.<ext>` | Exact source code filename created in sandbox (e.g., `Main.java`, `main.go`). |
 | `compiler(&self)` | `None` | Path to compiler binary. If `None`, compile step is skipped. |
 | `compiler_flags(&self)` | `&[]` | Compiler arguments (e.g., `&["--std=c++17", "-O2"]`). |
-| `compile_command(&self)` | Auto-derived | Constructs `<compiler> <flags...> source.<ext> -o <artifact>`. |
+| `compile_command(&self)` | Auto-derived | Constructs `<compiler> <flags...> <source_filename> -o <artifact>`. |
 | `compiled_artifact(&self)` | `"source"` if compiled | Binary name produced by compiler and copied to run sandbox. |
 | `run_command(&self)` | `["./source"]` | Command executed inside the runtime Isolate sandbox. |
 | `custom_checker(&self)` | `None` | Optional custom validator override from `./checker/` (fallback to task manifest). |

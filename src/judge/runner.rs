@@ -79,6 +79,16 @@ pub fn run(task_id: &str, submission_id: u64, code: String, language: &str) -> R
     let language_adapter = get_language(language).map_err(anyhow::Error::from)?;
     let task_config = get_task_config(task_id).map_err(anyhow::Error::from)?;
 
+    if !task_config.allowed_languages.is_empty()
+        && !task_config.allowed_languages.iter().any(|l| l == language)
+    {
+        return Err(crate::error::AppError::BadRequest(format!(
+            "Language '{language}' is not allowed for task '{task_id}'. Allowed languages: {}",
+            task_config.allowed_languages.join(", ")
+        ))
+        .into());
+    }
+
     let testcases_dir = PathBuf::from(format!("tasks/{task_id}/testcases"));
 
     if is_testcases_error(&testcases_dir, task_config.num_testcases) {

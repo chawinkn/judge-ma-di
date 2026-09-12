@@ -128,3 +128,33 @@ fn isolate_cleanup_is_idempotent() {
     // calling cleanup again is still a no-op returning Ok(())
     assert!(isolate.cleanup().is_ok());
 }
+
+#[test]
+fn runner_rejects_disallowed_language() {
+    let temp_dir = std::path::Path::new("tasks/_test_disallowed_lang_fixture");
+    let _ = std::fs::create_dir_all(temp_dir.join("testcases"));
+    let manifest = r#"{
+        "time_limit": 1.0,
+        "memory_limit": 256,
+        "checker": "lcmp",
+        "skip": false,
+        "full_score": 100,
+        "num_testcases": 1,
+        "subtasks": [],
+        "allowed_languages": ["python"]
+    }"#;
+    std::fs::write(temp_dir.join("manifest.json"), manifest).unwrap();
+
+    let res = run(
+        "_test_disallowed_lang_fixture",
+        1,
+        "int main() {}".to_string(),
+        "cpp",
+    );
+    let _ = std::fs::remove_dir_all(temp_dir);
+
+    assert!(res.is_err());
+    let err_str = res.unwrap_err().to_string();
+    assert!(err_str.contains("is not allowed for task"));
+    assert!(err_str.contains("python"));
+}

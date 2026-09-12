@@ -54,6 +54,7 @@ tasks/<task_id>/
 | `full_score` | `integer` | Total maximum score awarded for passing all testcases (typically `100`). |
 | `num_testcases` | `integer` | Total count of testcases (`1` through `N`). Must be greater than `0`. All matching `.in` and `.sol` files must exist. |
 | `subtasks` | `array` | List of subtask definitions (each subtask `num_testcases` must also be $> 0$). Empty `[]` indicates flat uniform scoring across all testcases. |
+| `allowed_languages` | `array` | Optional list of allowed language keys (e.g. `["cpp", "python"]`). If omitted or empty, all registered languages are permitted. |
 
 ---
 

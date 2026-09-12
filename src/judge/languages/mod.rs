@@ -13,6 +13,10 @@ pub trait Language: Send + Sync + Debug {
     fn name(&self) -> &'static str;
     fn ext(&self) -> &'static str;
 
+    fn source_filename(&self) -> String {
+        format!("source.{}", self.ext())
+    }
+
     fn compiler(&self) -> Option<&'static str> {
         None
     }
@@ -26,7 +30,7 @@ pub trait Language: Send + Sync + Debug {
         let artifact = self.compiled_artifact()?;
         let mut cmd = vec![compiler.to_string()];
         cmd.extend(self.compiler_flags().iter().map(|s| s.to_string()));
-        cmd.push(format!("source.{}", self.ext()));
+        cmd.push(self.source_filename());
         cmd.push("-o".to_string());
         cmd.push(artifact.to_string());
         Some(cmd)
@@ -52,6 +56,12 @@ pub trait Language: Send + Sync + Debug {
 pub static CPP: Cpp = Cpp;
 pub static C_LANG: C = C;
 pub static PYTHON: Python = Python;
+
+pub static ALL_LANGUAGES: &[&'static dyn Language] = &[&CPP, &C_LANG, &PYTHON];
+
+pub fn supported_languages() -> &'static [&'static dyn Language] {
+    ALL_LANGUAGES
+}
 
 pub fn get_language(name: &str) -> Result<&'static dyn Language, AppError> {
     match name {
