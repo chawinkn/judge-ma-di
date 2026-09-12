@@ -206,7 +206,7 @@ The database uses PostgreSQL 17 with two core tables defined in `scripts/init.sq
 
 ### F. Sandbox Security & Fault Tolerance
 * **RAII Sandbox Resource Cleanup**: `Isolate` implements `Drop` to guarantee sandbox directories and cgroups are unconditionally cleaned up even on mid-run errors or panics.
-* **Safe Sandbox Metadata Placement**: Execution metadata (`meta.txt`) is stored outside the untrusted `box/` directory in the sandbox parent root, preventing untrusted code from tampering with or creating directories colliding with `meta.txt`.
+* **Safe Sandbox Metadata Placement**: Execution metadata (`meta.txt`) is stored outside the untrusted `box/` directory in the system temp directory (`/tmp/isolate_meta_<box_id>.txt`), preventing untrusted code from tampering with or creating directories colliding with `meta.txt`, while enabling non-root runner and test execution.
 * **Bounded Checker Execution**: Checkers are wrapped with a 10-second timeout (`/usr/bin/timeout 10`) on the host to prevent hanging or malicious testlib checkers from locking worker threads.
 * **Resilient Worker Polling**: Database connection pool dropouts and transient query errors are caught and retried with exponential backoff rather than terminating the process with `exit(1)`.
 * **Non-Blocking Runtime Offloading**: Synchronous judging execution ([`runner::run`](file:///mnt/c/Users/sitti/judge-ma-di/src/judge/runner.rs)) is offloaded via `tokio::task::spawn_blocking`, ensuring subprocess calls and disk I/O never starve Tokio async threads or stall Axum HTTP endpoints.

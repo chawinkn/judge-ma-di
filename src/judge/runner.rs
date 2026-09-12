@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::{
-    cmp, fmt, fs,
+    fmt,
     path::{Path, PathBuf},
 };
 
@@ -69,19 +69,14 @@ pub enum RunStatus {
 pub fn is_testcases_error(task_path: &Path, num_testcases: u64) -> bool {
     num_testcases == 0
         || (1..=num_testcases).any(|i| {
-            fs::metadata(task_path.join(format!("{}.in", i))).is_err()
-                || fs::metadata(task_path.join(format!("{}.sol", i))).is_err()
+            !task_path.join(format!("{i}.in")).exists()
+                || !task_path.join(format!("{i}.sol")).exists()
         })
 }
 
-pub fn run(
-    task_id: String,
-    submission_id: u64,
-    code: String,
-    language: String,
-) -> Result<JudgeResult> {
-    let language_config = get_language_config(&language).map_err(anyhow::Error::msg)?;
-    let task_config = get_task_config(&task_id).map_err(anyhow::Error::msg)?;
+pub fn run(task_id: &str, submission_id: u64, code: String, language: &str) -> Result<JudgeResult> {
+    let language_config = get_language_config(language).map_err(anyhow::Error::from)?;
+    let task_config = get_task_config(task_id).map_err(anyhow::Error::from)?;
 
     let testcases_dir = PathBuf::from(format!("tasks/{task_id}/testcases"));
 
@@ -100,9 +95,9 @@ pub fn run(
         time_limit: task_config.time_limit,
         memory_limit: task_config.memory_limit * 1000,
         code,
-        ext: language_config.ext,
-        compile_script: language_config.compile,
-        run_script: language_config.run,
+        ext: language_config.ext.clone(),
+        compile_script: language_config.compile.clone(),
+        run_script: language_config.run.clone(),
         checker: task_config.checker,
         testcases_dir,
         initialized: false,
@@ -138,11 +133,10 @@ pub fn run(
 
 pub fn run_each<S: Sandbox>(
     isolate: &mut S,
-    score: u64,
+    mut score: u64,
     subtask_index: u64,
     test_index: u64,
 ) -> Result<RunResult> {
-    let mut score = score;
     let mut correct = true;
 
     let isolate_result = isolate.run(test_index)?;
@@ -176,6 +170,10 @@ pub fn run_normal<S: Sandbox>(
     full_score: u64,
     num_testcases: u64,
 ) -> Result<JudgeResult> {
+    if num_testcases == 0 {
+        return Ok(JudgeResult::default());
+    }
+
     let mut judge_result = JudgeResult {
         result: Vec::with_capacity(num_testcases as usize),
         ..Default::default()
@@ -186,8 +184,8 @@ pub fn run_normal<S: Sandbox>(
         let run_result = run_each(isolate, score, 0, test_index)?;
 
         judge_result.score += run_result.score;
-        judge_result.memory = cmp::max(judge_result.memory, run_result.memory);
-        judge_result.time = cmp::max(judge_result.time, (run_result.time * 1000.0) as u64);
+        judge_result.memory = judge_result.memory.max(run_result.memory);
+        judge_result.time = judge_result.time.max((run_result.time * 1000.0) as u64);
 
         judge_result.result.push(run_result);
     }
@@ -238,8 +236,8 @@ pub fn run_subtask<S: Sandbox>(
                     skipped = true;
                 }
 
-                judge_result.memory = cmp::max(judge_result.memory, run_result.memory);
-                judge_result.time = cmp::max(judge_result.time, (run_result.time * 1000.0) as u64);
+                judge_result.memory = judge_result.memory.max(run_result.memory);
+                judge_result.time = judge_result.time.max((run_result.time * 1000.0) as u64);
 
                 subtask_result.push(run_result);
             }

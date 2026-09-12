@@ -8,15 +8,6 @@ use tracing::{debug, error, info};
 
 use crate::judge::runner::run;
 
-fn poll_interval() -> Duration {
-    Duration::from_millis(
-        std::env::var("POLL_INTERVAL_MS")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(1000),
-    )
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub struct PolledSubmission {
     pub submission_id: u64,
@@ -27,7 +18,12 @@ pub struct PolledSubmission {
 
 pub async fn run_worker(pool: Pool) -> Result<()> {
     info!("Polling for queued submissions");
-    let poll_interval = poll_interval();
+    let poll_interval = Duration::from_millis(
+        std::env::var("POLL_INTERVAL_MS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1000),
+    );
 
     loop {
         let db_client = match pool.get().await {
@@ -46,12 +42,10 @@ pub async fn run_worker(pool: Pool) -> Result<()> {
                 }
             }
             Ok(None) => {
-                drop(db_client);
                 sleep(poll_interval).await;
             }
             Err(err) => {
                 error!(error = %err, "Failed to poll queued submissions, retrying");
-                drop(db_client);
                 sleep(poll_interval).await;
             }
         }
@@ -128,10 +122,10 @@ async fn judge_and_writeback(db_client: &Client, polled: PolledSubmission) -> Re
         "Start"
     );
 
-    let task_id_clone = task_id.clone();
+    let task_id_for_task = task_id.clone();
     let attempt = tokio::task::spawn_blocking(move || {
         decode_source_code(&code)
-            .and_then(|source| run(task_id_clone, submission_id, source, language))
+            .and_then(|source| run(&task_id_for_task, submission_id, source, &language))
     })
     .await
     .unwrap_or_else(|e| Err(anyhow::anyhow!("Judge task panicked: {e}")));

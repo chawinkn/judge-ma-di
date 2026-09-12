@@ -7,10 +7,10 @@ use std::path::Path;
 #[test]
 fn reports_testcases_error_when_testcases_are_missing() {
     let result = run(
-        "_test_missing_testcases".to_string(),
+        "_test_missing_testcases",
         1,
         "int main() {}".to_string(),
-        "cpp".to_string(),
+        "cpp",
     )
     .unwrap();
 
@@ -20,10 +20,10 @@ fn reports_testcases_error_when_testcases_are_missing() {
 #[test]
 fn errors_on_unsupported_language() {
     let result = run(
-        "a_plus_b".to_string(),
+        "a_plus_b",
         1,
         "fn main() {}".to_string(),
-        "unsupported_lang".to_string(),
+        "unsupported_lang",
     );
 
     assert!(result.is_err());
@@ -32,10 +32,10 @@ fn errors_on_unsupported_language() {
 #[test]
 fn errors_on_nonexistent_task() {
     let result = run(
-        "nonexistent_task_xyz".to_string(),
+        "nonexistent_task_xyz",
         1,
         "int main() {}".to_string(),
-        "cpp".to_string(),
+        "cpp",
     );
 
     assert!(result.is_err());
@@ -71,7 +71,7 @@ fn testcases_validation_fails_when_testcase_count_is_zero() {
 }
 
 #[test]
-fn test_check_rejects_malicious_checker() {
+fn isolate_check_rejects_malicious_checker() {
     let mut isolate = Isolate::default();
     isolate.checker = "../../../bin/sh".to_string();
     let res = isolate.check(1);
@@ -80,19 +80,14 @@ fn test_check_rejects_malicious_checker() {
 }
 
 #[test]
-fn test_runner_rejects_malicious_task_id() {
-    let res = run(
-        "../../etc".to_string(),
-        1,
-        "int main() {}".to_string(),
-        "cpp".to_string(),
-    );
+fn runner_rejects_malicious_task_id() {
+    let res = run("../../etc", 1, "int main() {}".to_string(), "cpp");
     assert!(res.is_err());
     assert!(res.unwrap_err().to_string().contains("invalid task_id"));
 }
 
 #[test]
-fn test_check_evaluates_correct_and_wrong_output() {
+fn isolate_check_evaluates_correct_and_wrong_output() {
     let temp_dir = std::env::temp_dir().join("judge_test_check_dir");
     let _ = std::fs::create_dir_all(&temp_dir);
 
@@ -115,19 +110,17 @@ fn test_check_evaluates_correct_and_wrong_output() {
 }
 
 #[test]
-fn test_isolate_meta_path_is_outside_box() {
+fn isolate_meta_path_is_outside_box() {
     let mut isolate = Isolate::default();
+    isolate.box_id = 42;
     isolate.box_path = std::path::PathBuf::from("/var/local/lib/isolate/42/box");
     let meta = isolate.meta_path();
-    assert_eq!(
-        meta,
-        std::path::PathBuf::from("/var/local/lib/isolate/42/meta.txt")
-    );
+    assert_eq!(meta, std::env::temp_dir().join("isolate_meta_42.txt"));
     assert_ne!(meta.parent(), Some(isolate.box_path.as_path()));
 }
 
 #[test]
-fn test_isolate_cleanup_idempotent() {
+fn isolate_cleanup_is_idempotent() {
     let mut isolate = Isolate::default();
     // initialized is false by default -> cleanup is a no-op returning Ok(())
     assert!(isolate.cleanup().is_ok());
