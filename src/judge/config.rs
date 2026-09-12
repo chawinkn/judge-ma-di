@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LanguageConfig {
     pub lang: String,
     pub ext: String,
@@ -50,19 +50,27 @@ pub fn validate_checker(checker: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-pub fn get_config() -> Result<Config> {
-    let config_data = fs::read_to_string("config.json").context("Failed to read config.json")?;
-    let config = serde_json::from_str(&config_data).context("Failed to parse config.json")?;
+pub fn get_config() -> Result<&'static Config> {
+    use std::sync::OnceLock;
+    static CONFIG: OnceLock<Config> = OnceLock::new();
 
-    Ok(config)
+    if let Some(cfg) = CONFIG.get() {
+        return Ok(cfg);
+    }
+
+    let config_data = fs::read_to_string("config.json").context("Failed to read config.json")?;
+    let config: Config =
+        serde_json::from_str(&config_data).context("Failed to parse config.json")?;
+
+    Ok(CONFIG.get_or_init(|| config))
 }
 
-pub fn get_language_config(language: &str) -> Result<LanguageConfig, AppError> {
+pub fn get_language_config(language: &str) -> Result<&'static LanguageConfig, AppError> {
     let config = get_config().context("Failed to get config")?;
 
     config
         .language
-        .into_iter()
+        .iter()
         .find(|lang_config| lang_config.lang == language)
         .ok_or_else(|| AppError::BadRequest("Unsupported Language".to_string()))
 }

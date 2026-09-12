@@ -8,7 +8,7 @@ use std::{
 
 use crate::judge::config::validate_checker;
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RunVerdict {
     #[serde(rename = "Compilation Error")]
     CompilationError,
@@ -116,7 +116,7 @@ impl Isolate {
                 .arg("--env=PATH=/usr/bin:/bin")
                 .arg("--run")
                 .arg("--")
-                .args(compile_script.split(' '))
+                .args(compile_script.split_whitespace())
                 .output()?;
 
             if output.status.success() {
@@ -158,22 +158,16 @@ impl Isolate {
             "Checker execution timed out after 10 seconds"
         );
 
-        let is_correct = if output.stdout.starts_with(b"Correct\n100") {
-            true
-        } else if output.stdout.starts_with(b"Incorrect") {
-            false
-        } else {
-            output.status.success() && output.stdout.is_empty()
-        };
+        let is_correct = output.stdout.starts_with(b"Correct\n100")
+            || (!output.stdout.starts_with(b"Incorrect")
+                && output.status.success()
+                && output.stdout.is_empty());
 
         Ok(is_correct)
     }
 
     pub fn meta_path(&self) -> PathBuf {
-        self.box_path
-            .parent()
-            .unwrap_or(&self.box_path)
-            .join("meta.txt")
+        std::env::temp_dir().join(format!("isolate_meta_{}.txt", self.box_id))
     }
 
     pub fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
@@ -193,7 +187,7 @@ impl Isolate {
             .arg("--processes=128")
             .arg("--run")
             .arg("--")
-            .args(run_script.split(' '))
+            .args(run_script.split_whitespace())
             .output()?;
 
         let result = self.get_result()?;
@@ -202,7 +196,7 @@ impl Isolate {
     }
 
     pub fn get_result(&self) -> Result<IsolateResult> {
-        let mut result: IsolateResult = Default::default();
+        let mut result = IsolateResult::default();
         let mut memory_limit_exceeded = false;
 
         let meta = fs::read_to_string(self.meta_path())?;
@@ -211,7 +205,7 @@ impl Isolate {
             if let Some((key, val)) = meta_line.split_once(':') {
                 match key {
                     "status" => {
-                        result.status = match val {
+                        result.status = match val.trim() {
                             "RE" => RunVerdict::VerdictRE,
                             "SG" => RunVerdict::VerdictSG,
                             "TO" => RunVerdict::VerdictTLE,
@@ -219,8 +213,8 @@ impl Isolate {
                             _ => RunVerdict::VerdictSG,
                         };
                     }
-                    "time" => result.time_usage = val.parse()?,
-                    "cg-mem" => result.memory_usage = val.parse()?,
+                    "time" => result.time_usage = val.trim().parse()?,
+                    "cg-mem" => result.memory_usage = val.trim().parse()?,
                     "cg-oom-killed" => memory_limit_exceeded = val.trim() == "1",
                     _ => (),
                 }
@@ -234,6 +228,7 @@ impl Isolate {
     }
 
     pub fn cleanup(&mut self) -> Result<()> {
+        let _ = fs::remove_file(self.meta_path());
         if self.initialized {
             self.initialized = false;
             Command::new("isolate")

@@ -129,24 +129,28 @@ pub fn init_tracing() {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_resolve_filter_dev_default() {
-        assert_eq!(
-            resolve_filter_from(None, false),
-            "debug,tokio_postgres=warn,tower_http=debug,axum::rejection=trace"
-        );
-    }
+    mod resolve_filter_from {
+        use super::*;
 
-    #[test]
-    fn test_resolve_filter_prod_default() {
-        assert_eq!(resolve_filter_from(None, true), "info,tokio_postgres=warn");
-    }
+        #[test]
+        fn returns_dev_defaults_when_no_rust_log_and_not_prod() {
+            assert_eq!(
+                resolve_filter_from(None, false),
+                "debug,tokio_postgres=warn,tower_http=debug,axum::rejection=trace"
+            );
+        }
 
-    #[test]
-    fn test_resolve_filter_rust_log_precedence() {
-        assert_eq!(
-            resolve_filter_from(Some("trace,my_crate=info"), true),
-            "trace,my_crate=info"
-        );
+        #[test]
+        fn returns_prod_defaults_when_no_rust_log_and_is_prod() {
+            assert_eq!(resolve_filter_from(None, true), "info,tokio_postgres=warn");
+        }
+
+        #[test]
+        fn rust_log_env_takes_precedence_over_is_prod_flag() {
+            assert_eq!(
+                resolve_filter_from(Some("trace,my_crate=info"), true),
+                "trace,my_crate=info"
+            );
+        }
     }
 }

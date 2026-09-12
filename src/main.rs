@@ -27,11 +27,15 @@ async fn main() {
     let app = routes::build(pool);
 
     let port = "0.0.0.0:5000";
-    let listener = tokio::net::TcpListener::bind(port).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(port)
+        .await
+        .expect("Failed to bind TCP listener on port 5000");
 
     let api_handler = tokio::spawn(async move {
         info!(" Server is starting on: {:?}", port);
-        axum::serve(listener, app).await.unwrap();
+        axum::serve(listener, app)
+            .await
+            .expect("axum server exited unexpectedly");
     });
 
     tokio::select! {

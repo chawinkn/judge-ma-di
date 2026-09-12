@@ -49,7 +49,6 @@ pub fn build(pool: Pool) -> Router {
                     "http_request",
                     method = ?request.method(),
                     matched_path,
-                    some_other_field = tracing::field::Empty,
                 )
             }),
         )
