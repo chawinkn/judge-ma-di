@@ -16,8 +16,8 @@ pub fn create_pool(url: &str) -> Result<Pool> {
         recycling_method: deadpool_postgres::RecyclingMethod::Verified,
     };
 
-    let builder: openssl::ssl::SslConnectorBuilder =
-        SslConnector::builder(SslMethod::tls()).unwrap();
+    let builder: openssl::ssl::SslConnectorBuilder = SslConnector::builder(SslMethod::tls())
+        .expect("Failed to initialise OpenSSL TLS connector");
     let connector = MakeTlsConnector::new(builder.build());
 
     let mgr = deadpool_postgres::Manager::from_config(pg_config, connector, mgr_config);

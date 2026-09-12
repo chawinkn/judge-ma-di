@@ -18,12 +18,14 @@ pub enum AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AppError::BadRequest(msg) => write!(f, "{}", msg),
-            AppError::NotFound(msg) => write!(f, "{}", msg),
-            AppError::Internal(err) => write!(f, "{:?}", err),
+            AppError::BadRequest(msg) => write!(f, "{msg}"),
+            AppError::NotFound(msg) => write!(f, "{msg}"),
+            AppError::Internal(err) => write!(f, "{err}"),
         }
     }
 }
+
+impl std::error::Error for AppError {}
 
 /// Enum instead of a raw `StatusCode` match so the HTTP status and its body
 /// code can never drift apart (no silent `_ => INTERNAL_SERVER_ERROR` catch-all).
@@ -71,11 +73,14 @@ impl IntoResponse for AppError {
     }
 }
 
-impl<E> From<E> for AppError
-where
-    E: Into<anyhow::Error>,
-{
-    fn from(err: E) -> Self {
+impl From<anyhow::Error> for AppError {
+    fn from(err: anyhow::Error) -> Self {
+        Self::Internal(err)
+    }
+}
+
+impl From<std::io::Error> for AppError {
+    fn from(err: std::io::Error) -> Self {
         Self::Internal(err.into())
     }
 }
