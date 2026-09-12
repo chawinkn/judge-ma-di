@@ -49,9 +49,9 @@ pub trait Language: Send + Sync + Debug {
     }
 }
 
-pub static CPP: Cpp = Cpp::new();
-pub static C_LANG: C = C::new();
-pub static PYTHON: Python = Python::new();
+pub static CPP: Cpp = Cpp;
+pub static C_LANG: C = C;
+pub static PYTHON: Python = Python;
 
 pub fn get_language(name: &str) -> Result<&'static dyn Language, AppError> {
     match name {
