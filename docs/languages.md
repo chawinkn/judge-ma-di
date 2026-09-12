@@ -45,12 +45,8 @@ Only provide `name`, `ext`, `compiler`, and `compiler_flags`. Compilation, artif
 ```rust
 use crate::judge::languages::Language;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Rust;
-
-impl Rust {
-    pub const fn new() -> Self { Self }
-}
 
 impl Language for Rust {
     fn name(&self) -> &'static str { "rust" }
@@ -67,12 +63,8 @@ No compiler hook needed. Only provide `name`, `ext`, and `run_command`:
 ```rust
 use crate::judge::languages::Language;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct JavaScript;
-
-impl JavaScript {
-    pub const fn new() -> Self { Self }
-}
 
 impl Language for JavaScript {
     fn name(&self) -> &'static str { "javascript" }
@@ -90,12 +82,8 @@ Override `run_command` and optionally specify `custom_checker` to enforce a spec
 ```rust
 use crate::judge::languages::Language;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Sql;
-
-impl Sql {
-    pub const fn new() -> Self { Self }
-}
 
 impl Language for Sql {
     fn name(&self) -> &'static str { "sql" }
@@ -121,7 +109,7 @@ impl Language for Sql {
 
 2. Declare static singleton:
    ```rust
-   pub static RUST: Rust = Rust::new();
+   pub static RUST: Rust = Rust;
    ```
 
 3. Add branch to `get_language`:
@@ -198,8 +186,8 @@ impl Language for Cpp20 {
 Register both in [`src/judge/languages/mod.rs`](../src/judge/languages/mod.rs):
 
 ```rust
-pub static CPP: Cpp = Cpp::new();       // default "cpp" (C++17)
-pub static CPP20: Cpp20 = Cpp20::new(); // "cpp20" (C++20)
+pub static CPP: Cpp = Cpp;       // default "cpp" (C++17)
+pub static CPP20: Cpp20 = Cpp20; // "cpp20" (C++20)
 
 pub fn get_language(name: &str) -> Result<&'static dyn Language, AppError> {
     match name {

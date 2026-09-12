@@ -1,13 +1,7 @@
 use crate::judge::languages::Language;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Python;
-
-impl Python {
-    pub const fn new() -> Self {
-        Self
-    }
-}
 
 impl Language for Python {
     fn name(&self) -> &'static str {

@@ -1,13 +1,7 @@
 use crate::judge::languages::Language;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Cpp;
-
-impl Cpp {
-    pub const fn new() -> Self {
-        Self
-    }
-}
 
 impl Language for Cpp {
     fn name(&self) -> &'static str {
