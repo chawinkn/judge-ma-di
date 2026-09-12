@@ -4,8 +4,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::judge::config::{get_language_config, get_task_config, Subtask};
+use crate::judge::config::{get_task_config, Subtask};
 use crate::judge::isolate::{Isolate, RunVerdict, Sandbox};
+use crate::judge::languages::get_language;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -75,8 +76,18 @@ pub fn is_testcases_error(task_path: &Path, num_testcases: u64) -> bool {
 }
 
 pub fn run(task_id: &str, submission_id: u64, code: String, language: &str) -> Result<JudgeResult> {
-    let language_config = get_language_config(language).map_err(anyhow::Error::from)?;
+    let language_adapter = get_language(language).map_err(anyhow::Error::from)?;
     let task_config = get_task_config(task_id).map_err(anyhow::Error::from)?;
+
+    if !task_config.allowed_languages.is_empty()
+        && !task_config.allowed_languages.iter().any(|l| l == language)
+    {
+        return Err(crate::error::AppError::BadRequest(format!(
+            "Language '{language}' is not allowed for task '{task_id}'. Allowed languages: {}",
+            task_config.allowed_languages.join(", ")
+        ))
+        .into());
+    }
 
     let testcases_dir = PathBuf::from(format!("tasks/{task_id}/testcases"));
 
@@ -95,9 +106,7 @@ pub fn run(task_id: &str, submission_id: u64, code: String, language: &str) -> R
         time_limit: task_config.time_limit,
         memory_limit: task_config.memory_limit * 1000,
         code,
-        ext: language_config.ext.clone(),
-        compile_script: language_config.compile.clone(),
-        run_script: language_config.run.clone(),
+        language: language_adapter,
         checker: task_config.checker,
         testcases_dir,
         initialized: false,

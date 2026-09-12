@@ -63,7 +63,7 @@ Overview of the shell and SQL scripts in [`scripts/`](../scripts/).
     * `code` (`BYTEA NOT NULL`): Brotli-compressed JSON source code (`string` or `string[]`).
     * `score` (`INTEGER NOT NULL DEFAULT 0`): Evaluated score out of `full_score`.
     * `result` (`JSONB NOT NULL DEFAULT '[]'::jsonb`): Per-testcase JSON array of `RunResult` records.
-    * `language` (`TEXT NOT NULL`): Language identifier matching `config.json` (`"cpp"`, `"c"`, `"python"`).
+    * `language` (`TEXT NOT NULL`): Language adapter key (`"cpp"`, `"c"`, `"python"`).
     * `private` (`BOOLEAN NOT NULL DEFAULT FALSE`): Private submission flag.
   * **`idx_submission_queue`**: Partial index on `(submitted_at ASC, id ASC) WHERE status = 'In Queue'`, optimizing FIFO queue polling with `FOR UPDATE SKIP LOCKED`.
   * **Seed fixture**: Inserts default problem `'a_plus_b'` (`title: 'A + B Problem'`, `full_score: 100`) if not present.

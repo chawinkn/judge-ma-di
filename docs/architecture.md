@@ -172,7 +172,7 @@ The database uses PostgreSQL 17 with two core tables defined in `scripts/init.sq
        }
      ]
      ```
-   * `language` (`TEXT NOT NULL`): Language key matching `config.json` (`"cpp"`, `"c"`, `"python"`).
+   * `language` (`TEXT NOT NULL`): Language adapter key (`"cpp"`, `"c"`, `"python"`).
    * `private` (`BOOLEAN NOT NULL DEFAULT FALSE`): Contest/private submission visibility flag.
 
 3. **`idx_submission_queue` Partial Index**:

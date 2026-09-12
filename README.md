@@ -1,6 +1,20 @@
-# Programming Judge System
+# Online Judge Backend
 
 Judge Ma Di (จัดมาดิ๊)
+
+## Features
+
+- **EDA Queue Polling**: Concurrency-safe, distributed FIFO worker queue powered by PostgreSQL `FOR UPDATE SKIP LOCKED`.
+- **Isolated Sandboxed Judging**: Linux cgroups v2 resource isolation.
+- **Simple File Storage**: Simple file storage for admin task management.
+
+## Supported Languages
+
+* **C++** (`cpp`): G++ (`--std=c++17 -O2`)
+* **C** (`c`): GCC (`--std=c11 -O2`)
+* **Python** (`python`): Python 3 (bytecode syntax check + execution)
+
+Extensible via the [`Language`](src/judge/languages/mod.rs) trait adapter system.
 
 # Stack
 
@@ -102,6 +116,7 @@ $ cargo test --features integration # Int tests (requires Isolate + Postgres)
 
 ## Documentation
 
+- [docs/languages.md](docs/languages.md): Guide for adding new languages and custom execution adapters via the `Language` trait.
 - [docs/tasks.md](docs/tasks.md): Task directory structure, `manifest.json` specification, and full examples (`a_plus_b`, subtasks).
 - [docs/architecture.md](docs/architecture.md): Architecture overview, evaluation lifecycle flow, and design rationale.
 - [docs/scaling.md](docs/scaling.md): Horizontal worker scaling, role separation, and cloud deployment guide.
