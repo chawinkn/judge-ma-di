@@ -141,7 +141,13 @@ pub async fn upload_task(
         if safe_name.ends_with(".zip") {
             let target = format!("{dir}/testcases");
             let _ = tokio::fs::remove_dir_all(&target).await;
-            safe_extract_zip(&data, std::path::Path::new(&target))?;
+            let target_path = std::path::PathBuf::from(target);
+            let zip_data = data.clone();
+            tokio::task::spawn_blocking(move || safe_extract_zip(&zip_data, &target_path))
+                .await
+                .map_err(|e| {
+                    AppError::Internal(anyhow::anyhow!("Zip extraction task panicked: {e}"))
+                })??;
         }
     }
 

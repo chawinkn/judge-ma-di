@@ -4,7 +4,7 @@ use judge_ma_di::judge::config::{validate_checker, TaskConfig};
 use judge_ma_di::routes::task::{safe_extract_zip, validate_task_id};
 
 #[test]
-fn test_validate_task_id_valid() {
+fn validate_task_id_accepts_valid_identifiers() {
     assert!(validate_task_id("a_plus_b").is_ok());
     assert!(validate_task_id("task-123").is_ok());
     assert!(validate_task_id("0").is_ok());
@@ -12,7 +12,7 @@ fn test_validate_task_id_valid() {
 }
 
 #[test]
-fn test_validate_task_id_invalid() {
+fn validate_task_id_rejects_invalid_characters_and_traversal() {
     assert!(validate_task_id("").is_err());
     assert!(validate_task_id("../etc").is_err());
     assert!(validate_task_id("task/1").is_err());
@@ -22,12 +22,12 @@ fn test_validate_task_id_invalid() {
 }
 
 #[test]
-fn test_filename_sanitization() {
+fn filename_sanitization_extracts_base_filename() {
     let extract_safe_name = |raw: &str| {
         std::path::Path::new(raw)
             .file_name()
             .and_then(|n| n.to_str())
-            .map(|s| s.to_string())
+            .map(str::to_string)
     };
 
     assert_eq!(
@@ -45,7 +45,7 @@ fn test_filename_sanitization() {
 }
 
 #[test]
-fn test_safe_extract_zip_valid() {
+fn safe_extract_zip_extracts_valid_archive() {
     let mut buf = Vec::new();
     {
         let mut writer = zip::ZipWriter::new(Cursor::new(&mut buf));
@@ -67,7 +67,7 @@ fn test_safe_extract_zip_valid() {
 }
 
 #[test]
-fn test_safe_extract_zip_rejects_traversal() {
+fn safe_extract_zip_rejects_path_traversal() {
     let mut buf = Vec::new();
     {
         let mut writer = zip::ZipWriter::new(Cursor::new(&mut buf));
@@ -85,7 +85,7 @@ fn test_safe_extract_zip_rejects_traversal() {
 }
 
 #[test]
-fn test_manifest_validation_rejects_bad_checker() {
+fn manifest_validation_rejects_disallowed_checker() {
     let bad_manifest = br#"{
         "time_limit": 1.0,
         "memory_limit": 256,
@@ -103,7 +103,7 @@ fn test_manifest_validation_rejects_bad_checker() {
 }
 
 #[test]
-fn test_manifest_validation_zero_testcases() {
+fn manifest_deserializes_zero_testcases() {
     let manifest_zero = br#"{
         "time_limit": 1.0,
         "memory_limit": 256,
