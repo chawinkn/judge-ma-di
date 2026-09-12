@@ -1,17 +1,25 @@
 use judge_ma_di::error::AppError;
-use judge_ma_di::judge::config::{
-    get_language_config, get_task_config, validate_checker, ALLOWED_CHECKERS,
-};
+use judge_ma_di::judge::config::{get_task_config, validate_checker, ALLOWED_CHECKERS};
+use judge_ma_di::judge::languages::get_language;
 
 #[test]
-fn finds_a_known_language() {
-    let config = get_language_config("cpp").unwrap();
-    assert_eq!(config.lang, "cpp");
+fn finds_known_languages() {
+    let cpp = get_language("cpp").unwrap();
+    assert_eq!(cpp.name(), "cpp");
+    assert_eq!(cpp.ext(), "cpp");
+
+    let c = get_language("c").unwrap();
+    assert_eq!(c.name(), "c");
+    assert_eq!(c.ext(), "c");
+
+    let py = get_language("python").unwrap();
+    assert_eq!(py.name(), "python");
+    assert_eq!(py.ext(), "py");
 }
 
 #[test]
 fn rejects_an_unknown_language() {
-    let err = get_language_config("brainfuck").unwrap_err();
+    let err = get_language("brainfuck").unwrap_err();
     assert!(matches!(err, AppError::BadRequest(_)));
 }
 

@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::judge::config::validate_checker;
+use crate::judge::languages::{Language, CPP};
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RunVerdict {
@@ -32,19 +33,33 @@ impl Default for RunVerdict {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Isolate {
     pub box_path: PathBuf,
     pub box_id: u64,
     pub time_limit: f64,
     pub memory_limit: u64,
     pub code: String,
-    pub ext: String,
-    pub compile_script: String,
-    pub run_script: String,
+    pub language: &'static dyn Language,
     pub checker: String,
     pub testcases_dir: PathBuf,
     pub initialized: bool,
+}
+
+impl Default for Isolate {
+    fn default() -> Self {
+        Self {
+            box_path: PathBuf::new(),
+            box_id: 0,
+            time_limit: 0.0,
+            memory_limit: 0,
+            code: String::new(),
+            language: &CPP,
+            checker: String::new(),
+            testcases_dir: PathBuf::new(),
+            initialized: false,
+        }
+    }
 }
 
 #[derive(Default, PartialEq, Debug)]
@@ -73,7 +88,8 @@ impl Isolate {
         self.initialized = true;
 
         fs::write(
-            self.box_path.join(format!("source.{}", self.ext)),
+            self.box_path
+                .join(format!("source.{}", self.language.ext())),
             &self.code,
         )?;
 
@@ -81,6 +97,16 @@ impl Isolate {
     }
 
     pub fn compile(&mut self) -> Result<IsolateResult> {
+        let compile_command = match self.language.compile_command() {
+            Some(cmd) => cmd,
+            None => {
+                return Ok(IsolateResult {
+                    status: RunVerdict::VerdictOK,
+                    ..Default::default()
+                });
+            }
+        };
+
         let compile_box_id = self.box_id + 500;
         let box_path = Command::new("isolate")
             .arg("--cg")
@@ -95,15 +121,10 @@ impl Isolate {
         );
 
         let compile_box = PathBuf::from(String::from_utf8(box_path.stdout)?.trim()).join("box");
-        let source_file = format!("source.{}", self.ext);
+        let source_file = format!("source.{}", self.language.ext());
 
         let res = (|| -> Result<RunVerdict> {
             fs::write(compile_box.join(&source_file), &self.code)?;
-
-            let compile_script = self
-                .compile_script
-                .replace("{source_file}", &source_file)
-                .replace("{output}", "source");
 
             let output = Command::new("isolate")
                 .arg("--cg")
@@ -116,13 +137,15 @@ impl Isolate {
                 .arg("--env=PATH=/usr/bin:/bin")
                 .arg("--run")
                 .arg("--")
-                .args(compile_script.split_whitespace())
+                .args(&compile_command)
                 .output()?;
 
             if output.status.success() {
-                let compiled_bin = compile_box.join("source");
-                if compiled_bin.exists() {
-                    fs::copy(&compiled_bin, self.box_path.join("source"))?;
+                if let Some(artifact) = self.language.compiled_artifact() {
+                    let compiled_bin = compile_box.join(artifact);
+                    if compiled_bin.exists() {
+                        fs::copy(&compiled_bin, self.box_path.join(artifact))?;
+                    }
                 }
                 Ok(RunVerdict::VerdictOK)
             } else {
@@ -143,11 +166,12 @@ impl Isolate {
     }
 
     pub fn check(&mut self, test_index: u64) -> Result<bool> {
-        validate_checker(&self.checker).map_err(anyhow::Error::msg)?;
+        let checker = self.language.custom_checker().unwrap_or(&self.checker);
+        validate_checker(checker).map_err(anyhow::Error::msg)?;
 
         let output = Command::new("timeout")
             .arg("10")
-            .arg(format!("checker/{}", self.checker))
+            .arg(format!("checker/{}", checker))
             .arg(self.testcases_dir.join(format!("{}.in", test_index)))
             .arg(self.box_path.join("out.out"))
             .arg(self.testcases_dir.join(format!("{}.sol", test_index)))
@@ -171,7 +195,7 @@ impl Isolate {
     }
 
     pub fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
-        let run_script = self.run_script.replace("{source}", "source");
+        let run_cmd = self.language.run_command();
         let input_file = File::open(self.testcases_dir.join(format!("{}.in", test_index)))?;
 
         Command::new("isolate")
@@ -187,7 +211,7 @@ impl Isolate {
             .arg("--processes=128")
             .arg("--run")
             .arg("--")
-            .args(run_script.split_whitespace())
+            .args(&run_cmd)
             .output()?;
 
         let result = self.get_result()?;

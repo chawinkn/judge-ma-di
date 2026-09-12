@@ -44,7 +44,6 @@ WORKDIR /user/local/bin
 COPY --chmod=755 scripts/checker.sh ./checker.sh
 RUN ./checker.sh
 
-COPY config.json ./config.json
 COPY --chmod=755 scripts/entrypoint.sh ./entrypoint.sh
 
 COPY --from=builder /app/judge-ma-di ./judge-ma-di

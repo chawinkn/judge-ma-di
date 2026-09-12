@@ -5,19 +5,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct LanguageConfig {
-    pub lang: String,
-    pub ext: String,
-    pub compile: String,
-    pub run: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Config {
-    pub language: Vec<LanguageConfig>,
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TaskConfig {
     pub time_limit: f64,
@@ -48,31 +35,6 @@ pub fn validate_checker(checker: &str) -> Result<(), AppError> {
     }
 
     Ok(())
-}
-
-pub fn get_config() -> Result<&'static Config> {
-    use std::sync::OnceLock;
-    static CONFIG: OnceLock<Config> = OnceLock::new();
-
-    if let Some(cfg) = CONFIG.get() {
-        return Ok(cfg);
-    }
-
-    let config_data = fs::read_to_string("config.json").context("Failed to read config.json")?;
-    let config: Config =
-        serde_json::from_str(&config_data).context("Failed to parse config.json")?;
-
-    Ok(CONFIG.get_or_init(|| config))
-}
-
-pub fn get_language_config(language: &str) -> Result<&'static LanguageConfig, AppError> {
-    let config = get_config().context("Failed to get config")?;
-
-    config
-        .language
-        .iter()
-        .find(|lang_config| lang_config.lang == language)
-        .ok_or_else(|| AppError::BadRequest("Unsupported Language".to_string()))
 }
 
 pub fn validate_task_id(task_id: &str) -> Result<(), AppError> {
