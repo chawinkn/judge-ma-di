@@ -40,7 +40,7 @@ pub fn task_dir(id: &str) -> Result<PathBuf, AppError> {
     Ok(Path::new(TASKS_ROOT).join(id))
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Subtask {
     pub full_score: u64,
     pub num_testcases: u64,
@@ -90,6 +90,7 @@ impl Manifest {
 }
 
 pub struct Task {
+    id: String,
     dir: PathBuf,
     manifest: Manifest,
 }
@@ -105,7 +106,15 @@ impl Task {
         let bytes = fs::read(dir.join("manifest.json"))
             .map_err(|_| AppError::NotFound("Task id not found".to_string()))?;
         let manifest = Manifest::parse(&bytes)?;
-        Ok(Self { dir, manifest })
+        Ok(Self {
+            id: id.to_string(),
+            dir,
+            manifest,
+        })
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
     }
 
     pub fn manifest(&self) -> &Manifest {
