@@ -1,15 +1,15 @@
-use judge_ma_di::judge::languages::{get_language, supported_languages, Language};
+use judge_ma_di::error::AppError;
+use judge_ma_di::judge::languages::{get_language, LANGUAGES};
 
 #[test]
-fn cpp_adapter_metadata_and_commands() {
+fn cpp_entry() {
     let cpp = get_language("cpp").unwrap();
-    assert_eq!(cpp.name(), "cpp");
-    assert_eq!(cpp.ext(), "cpp");
-    assert_eq!(cpp.source_filename(), "source.cpp");
-    assert_eq!(cpp.compiled_artifact(), Some("source"));
+    assert_eq!(cpp.name, "cpp");
+    assert_eq!(cpp.source_file, "source.cpp");
+    let compile = cpp.compile.as_ref().unwrap();
     assert_eq!(
-        cpp.compile_command().unwrap(),
-        vec![
+        compile.cmd,
+        [
             "/usr/bin/g++",
             "--std=c++17",
             "-O2",
@@ -18,20 +18,19 @@ fn cpp_adapter_metadata_and_commands() {
             "source"
         ]
     );
-    assert_eq!(cpp.run_command(), vec!["./source"]);
-    assert_eq!(cpp.custom_checker(), None);
+    assert_eq!(compile.artifact, "source");
+    assert_eq!(cpp.run, ["./source"]);
 }
 
 #[test]
-fn c_adapter_metadata_and_commands() {
+fn c_entry() {
     let c = get_language("c").unwrap();
-    assert_eq!(c.name(), "c");
-    assert_eq!(c.ext(), "c");
-    assert_eq!(c.source_filename(), "source.c");
-    assert_eq!(c.compiled_artifact(), Some("source"));
+    assert_eq!(c.name, "c");
+    assert_eq!(c.source_file, "source.c");
+    let compile = c.compile.as_ref().unwrap();
     assert_eq!(
-        c.compile_command().unwrap(),
-        vec![
+        compile.cmd,
+        [
             "/usr/bin/gcc",
             "--std=c11",
             "-O2",
@@ -40,127 +39,60 @@ fn c_adapter_metadata_and_commands() {
             "source"
         ]
     );
-    assert_eq!(c.run_command(), vec!["./source"]);
-    assert_eq!(c.custom_checker(), None);
+    assert_eq!(compile.artifact, "source");
+    assert_eq!(c.run, ["./source"]);
 }
 
 #[test]
-fn python_adapter_metadata_and_commands() {
+fn python_runs_the_compiled_bytecode() {
     let py = get_language("python").unwrap();
-    assert_eq!(py.name(), "python");
-    assert_eq!(py.ext(), "py");
-    assert_eq!(py.source_filename(), "source.py");
-    assert_eq!(py.compiled_artifact(), None);
+    assert_eq!(py.name, "python");
+    assert_eq!(py.source_file, "source.py");
+    let compile = py.compile.as_ref().unwrap();
     assert_eq!(
-        py.compile_command().unwrap(),
-        vec!["/usr/bin/python3", "-m", "compileall", "source.py", "-b"]
+        compile.cmd,
+        [
+            "/usr/bin/python3",
+            "-m",
+            "compileall",
+            "-b",
+            "-q",
+            "source.py"
+        ]
     );
-    assert_eq!(py.run_command(), vec!["/usr/bin/python3", "source.py"]);
-    assert_eq!(py.custom_checker(), None);
+    assert_eq!(compile.artifact, "source.pyc");
+    assert_eq!(py.run, ["/usr/bin/python3", "source.pyc"]);
 }
 
 #[test]
-fn supported_languages_list() {
-    let all = supported_languages();
-    let names: Vec<&str> = all.iter().map(|l| l.name()).collect();
-    assert_eq!(names, vec!["cpp", "c", "python"]);
-}
-
-#[test]
-fn custom_compiled_language_uses_default_methods() {
-    #[derive(Debug)]
-    struct RustLang;
-
-    impl Language for RustLang {
-        fn name(&self) -> &'static str {
-            "rust"
-        }
-        fn ext(&self) -> &'static str {
-            "rs"
-        }
-        fn compiler(&self) -> Option<&'static str> {
-            Some("/usr/bin/rustc")
-        }
-        fn compiler_flags(&self) -> &'static [&'static str] {
-            &["-O"]
-        }
+fn get_language_finds_every_entry_and_rejects_unknown() {
+    for language in LANGUAGES {
+        assert_eq!(get_language(language.name).unwrap().name, language.name);
     }
-
-    let rust = RustLang;
-    assert_eq!(rust.name(), "rust");
-    assert_eq!(rust.ext(), "rs");
-    assert_eq!(rust.source_filename(), "source.rs");
-    assert_eq!(rust.compiled_artifact(), Some("source"));
-    assert_eq!(
-        rust.compile_command().unwrap(),
-        vec!["/usr/bin/rustc", "-O", "source.rs", "-o", "source"]
-    );
-    assert_eq!(rust.run_command(), vec!["./source"]);
-    assert_eq!(rust.custom_checker(), None);
+    assert!(matches!(
+        get_language("brainfuck"),
+        Err(AppError::BadRequest(_))
+    ));
 }
 
 #[test]
-fn custom_domain_adapter_with_custom_filename() {
-    #[derive(Debug)]
-    struct JavaAdapter;
-
-    impl Language for JavaAdapter {
-        fn name(&self) -> &'static str {
-            "java"
-        }
-        fn ext(&self) -> &'static str {
-            "java"
-        }
-        fn source_filename(&self) -> String {
-            "Main.java".to_string()
-        }
-        fn compiler(&self) -> Option<&'static str> {
-            Some("/usr/bin/javac")
-        }
-        fn compiled_artifact(&self) -> Option<&'static str> {
-            Some("Main.class")
-        }
-        fn run_command(&self) -> Vec<String> {
-            vec!["/usr/bin/java".to_string(), "Main".to_string()]
-        }
+fn compile_command_builds_source_and_run_uses_artifact() {
+    for language in LANGUAGES {
+        let Some(compile) = &language.compile else {
+            continue;
+        };
+        assert!(
+            compile.cmd.contains(&language.source_file),
+            "{}",
+            language.name
+        );
+        assert!(
+            language
+                .run
+                .iter()
+                .any(|arg| arg.ends_with(compile.artifact)),
+            "{}",
+            language.name
+        );
     }
-
-    let java = JavaAdapter;
-    assert_eq!(java.source_filename(), "Main.java");
-    assert_eq!(
-        java.compile_command().unwrap(),
-        vec!["/usr/bin/javac", "Main.java", "-o", "Main.class"]
-    );
-}
-
-#[test]
-fn custom_domain_adapter_only_overwrites_run_and_checker() {
-    #[derive(Debug)]
-    struct SqlAdapter;
-
-    impl Language for SqlAdapter {
-        fn name(&self) -> &'static str {
-            "sql"
-        }
-        fn ext(&self) -> &'static str {
-            "sql"
-        }
-        fn run_command(&self) -> Vec<String> {
-            vec![
-                "/usr/bin/sqlite3".to_string(),
-                "-init".to_string(),
-                "source.sql".to_string(),
-            ]
-        }
-        fn custom_checker(&self) -> Option<&'static str> {
-            Some("rcmp4")
-        }
-    }
-
-    let sql = SqlAdapter;
-    assert_eq!(sql.name(), "sql");
-    assert_eq!(sql.ext(), "sql");
-    assert!(sql.compile_command().is_none());
-    assert_eq!(sql.compiled_artifact(), None);
-    assert_eq!(sql.custom_checker(), Some("rcmp4"));
 }

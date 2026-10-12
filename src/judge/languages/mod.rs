@@ -1,73 +1,73 @@
-pub mod c;
-pub mod cpp;
-pub mod python;
-
-pub use c::C;
-pub use cpp::Cpp;
-pub use python::Python;
-
 use crate::error::AppError;
-use std::fmt::Debug;
 
-pub trait Language: Send + Sync + Debug {
-    fn name(&self) -> &'static str;
-    fn ext(&self) -> &'static str;
-
-    fn source_filename(&self) -> String {
-        format!("source.{}", self.ext())
-    }
-
-    fn compiler(&self) -> Option<&'static str> {
-        None
-    }
-
-    fn compiler_flags(&self) -> &'static [&'static str] {
-        &[]
-    }
-
-    fn compile_command(&self) -> Option<Vec<String>> {
-        let compiler = self.compiler()?;
-        let artifact = self.compiled_artifact()?;
-        let mut cmd = vec![compiler.to_string()];
-        cmd.extend(self.compiler_flags().iter().map(|s| s.to_string()));
-        cmd.push(self.source_filename());
-        cmd.push("-o".to_string());
-        cmd.push(artifact.to_string());
-        Some(cmd)
-    }
-
-    fn compiled_artifact(&self) -> Option<&'static str> {
-        if self.compiler().is_some() {
-            Some("source")
-        } else {
-            None
-        }
-    }
-
-    fn run_command(&self) -> Vec<String> {
-        vec!["./source".to_string()]
-    }
-
-    fn custom_checker(&self) -> Option<&'static str> {
-        None
-    }
+#[derive(Debug)]
+pub struct Compile {
+    pub cmd: &'static [&'static str],
+    pub artifact: &'static str,
 }
 
-pub static CPP: Cpp = Cpp;
-pub static C_LANG: C = C;
-pub static PYTHON: Python = Python;
-
-pub static ALL_LANGUAGES: &[&'static dyn Language] = &[&CPP, &C_LANG, &PYTHON];
-
-pub fn supported_languages() -> &'static [&'static dyn Language] {
-    ALL_LANGUAGES
+#[derive(Debug)]
+pub struct Language {
+    pub name: &'static str,
+    pub source_file: &'static str,
+    pub compile: Option<Compile>,
+    pub run: &'static [&'static str],
 }
 
-pub fn get_language(name: &str) -> Result<&'static dyn Language, AppError> {
-    match name {
-        "cpp" => Ok(&CPP),
-        "c" => Ok(&C_LANG),
-        "python" => Ok(&PYTHON),
-        _ => Err(AppError::BadRequest("Unsupported Language".to_string())),
-    }
+pub static LANGUAGES: &[Language] = &[
+    Language {
+        name: "cpp",
+        source_file: "source.cpp",
+        compile: Some(Compile {
+            cmd: &[
+                "/usr/bin/g++",
+                "--std=c++17",
+                "-O2",
+                "source.cpp",
+                "-o",
+                "source",
+            ],
+            artifact: "source",
+        }),
+        run: &["./source"],
+    },
+    Language {
+        name: "c",
+        source_file: "source.c",
+        compile: Some(Compile {
+            cmd: &[
+                "/usr/bin/gcc",
+                "--std=c11",
+                "-O2",
+                "source.c",
+                "-o",
+                "source",
+            ],
+            artifact: "source",
+        }),
+        run: &["./source"],
+    },
+    Language {
+        name: "python",
+        source_file: "source.py",
+        compile: Some(Compile {
+            cmd: &[
+                "/usr/bin/python3",
+                "-m",
+                "compileall",
+                "-b",
+                "-q",
+                "source.py",
+            ],
+            artifact: "source.pyc",
+        }),
+        run: &["/usr/bin/python3", "source.pyc"],
+    },
+];
+
+pub fn get_language(name: &str) -> Result<&'static Language, AppError> {
+    LANGUAGES
+        .iter()
+        .find(|l| l.name == name)
+        .ok_or_else(|| AppError::BadRequest("Unsupported Language".to_string()))
 }

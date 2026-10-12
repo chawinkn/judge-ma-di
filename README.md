@@ -12,9 +12,9 @@ Judge Ma Di (จัดมาดิ๊)
 
 * **C++** (`cpp`): G++ (`--std=c++17 -O2`)
 * **C** (`c`): GCC (`--std=c11 -O2`)
-* **Python** (`python`): Python 3 (bytecode syntax check + execution)
+* **Python** (`python`): Python 3 (compiled to bytecode, then run from the `.pyc`)
 
-Extensible via the [`Language`](src/judge/languages/mod.rs) trait adapter system.
+Extensible by adding an entry to [`LANGUAGES`](src/judge/languages/mod.rs).
 
 # Stack
 
@@ -116,7 +116,7 @@ $ cargo test --features integration # Int tests (requires Isolate + Postgres)
 
 ## Documentation
 
-- [docs/languages.md](docs/languages.md): Guide for adding new languages and custom execution adapters via the `Language` trait.
+- [docs/languages.md](docs/languages.md): Guide for adding new languages via the `LANGUAGES` table.
 - [docs/tasks.md](docs/tasks.md): Task directory structure, `manifest.json` specification, and full examples (`a_plus_b`, subtasks).
 - [docs/architecture.md](docs/architecture.md): Architecture overview, evaluation lifecycle flow, and design rationale.
 - [docs/scaling.md](docs/scaling.md): Horizontal worker scaling, role separation, and cloud deployment guide.

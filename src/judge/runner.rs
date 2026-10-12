@@ -79,22 +79,18 @@ pub fn run(task_id: &str, submission_id: u64, code: String, language: &str) -> R
     judge(&task, language, &mut sandbox)
 }
 
-pub fn judge(
-    task: &Task,
-    language: &dyn Language,
-    sandbox: &mut impl Sandbox,
-) -> Result<JudgeResult> {
+pub fn judge(task: &Task, language: &Language, sandbox: &mut impl Sandbox) -> Result<JudgeResult> {
     let manifest = task.manifest();
 
     if !manifest.allowed_languages.is_empty()
         && !manifest
             .allowed_languages
             .iter()
-            .any(|l| l == language.name())
+            .any(|l| l == language.name)
     {
         return Err(crate::error::AppError::BadRequest(format!(
             "Language '{}' is not allowed for task '{}'. Allowed languages: {}",
-            language.name(),
+            language.name,
             task.id(),
             manifest.allowed_languages.join(", ")
         ))
