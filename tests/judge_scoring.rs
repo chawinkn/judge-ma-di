@@ -1,10 +1,14 @@
 use judge_ma_di::judge::isolate::{IsolateResult, RunVerdict};
-use judge_ma_di::judge::languages::CPP;
+use judge_ma_di::judge::languages::{get_language, Language};
 use judge_ma_di::judge::runner::{judge, JudgeStatus, RunStatus};
 use judge_ma_di::judge::sandbox::Sandbox;
 use judge_ma_di::judge::task::Task;
 use std::collections::VecDeque;
 use std::path::PathBuf;
+
+fn cpp() -> &'static Language {
+    get_language("cpp").unwrap()
+}
 
 struct TempRoot(PathBuf);
 
@@ -121,7 +125,7 @@ fn wrong_answer_scores_zero() {
     let task = normal(50, 1, &root);
     let mut sandbox = FakeSandbox::with_verdicts([RunVerdict::VerdictOK]).checks([false]);
 
-    let result = judge(&task, &CPP, &mut sandbox).unwrap();
+    let result = judge(&task, cpp(), &mut sandbox).unwrap();
 
     assert_eq!(result.result[0].status, RunStatus::WrongAnswer);
     assert_eq!(result.result[0].score, 0);
@@ -136,7 +140,7 @@ fn bad_verdict_skips_checker() {
     let task = normal(50, 1, &root);
     let mut sandbox = FakeSandbox::with_verdicts([RunVerdict::VerdictTLE]);
 
-    let result = judge(&task, &CPP, &mut sandbox).unwrap();
+    let result = judge(&task, cpp(), &mut sandbox).unwrap();
 
     assert_eq!(
         result.result[0].status,
@@ -159,7 +163,7 @@ fn normal_partial_score() {
     ])
     .checks([true, false, true]);
 
-    let result = judge(&task, &CPP, &mut sandbox).unwrap();
+    let result = judge(&task, cpp(), &mut sandbox).unwrap();
 
     assert_eq!(result.status, JudgeStatus::Completed);
     assert_eq!(result.result.len(), 4);
@@ -191,7 +195,7 @@ fn normal_time_memory_max() {
         ..FakeSandbox::with_verdicts([])
     };
 
-    let result = judge(&task, &CPP, &mut sandbox).unwrap();
+    let result = judge(&task, cpp(), &mut sandbox).unwrap();
 
     assert_eq!(result.time, 500); // 0.5s -> 500ms, the slower of the two
     assert_eq!(result.memory, 1000); // the larger of the two
@@ -204,7 +208,7 @@ fn subtasks_skip_zeroes_rest() {
     let mut sandbox = FakeSandbox::with_verdicts([RunVerdict::VerdictOK, RunVerdict::VerdictOK])
         .checks([true, false]);
 
-    let result = judge(&task, &CPP, &mut sandbox).unwrap();
+    let result = judge(&task, cpp(), &mut sandbox).unwrap();
 
     assert_eq!(result.result.len(), 3);
     assert_eq!(
@@ -231,7 +235,7 @@ fn subtasks_no_skip_runs_rest() {
     ])
     .checks([true, false, true]);
 
-    let result = judge(&task, &CPP, &mut sandbox).unwrap();
+    let result = judge(&task, cpp(), &mut sandbox).unwrap();
 
     // all 3 actually ran (no Skipped) - proves skip=false disables the
     // short-circuit rather than just changing the Skipped label.
@@ -252,7 +256,7 @@ fn subtasks_independent_scoring() {
     ])
     .checks([false, true, true]);
 
-    let result = judge(&task, &CPP, &mut sandbox).unwrap();
+    let result = judge(&task, cpp(), &mut sandbox).unwrap();
 
     assert_eq!(result.score, 70);
     assert_eq!(result.result[0].subtask_index, 1);
@@ -267,7 +271,7 @@ fn compile_failure_is_compilation_error() {
     let mut sandbox = FakeSandbox::with_verdicts([]);
     sandbox.compiles = false;
 
-    let result = judge(&task, &CPP, &mut sandbox).unwrap();
+    let result = judge(&task, cpp(), &mut sandbox).unwrap();
 
     assert_eq!(result.status, JudgeStatus::CompilationError);
     assert!(result.result.is_empty());
@@ -283,7 +287,7 @@ fn missing_testcases_skips_compile() {
     );
     let mut sandbox = FakeSandbox::with_verdicts([]);
 
-    let result = judge(&task, &CPP, &mut sandbox).unwrap();
+    let result = judge(&task, cpp(), &mut sandbox).unwrap();
 
     assert_eq!(result.status, JudgeStatus::TestcasesError);
     assert_eq!(sandbox.compile_calls, 0);
@@ -298,7 +302,7 @@ fn disallowed_language_is_rejected() {
     );
     let mut sandbox = FakeSandbox::with_verdicts([]);
 
-    let err = judge(&task, &CPP, &mut sandbox).unwrap_err().to_string();
+    let err = judge(&task, cpp(), &mut sandbox).unwrap_err().to_string();
 
     assert!(err.contains("Language 'cpp' is not allowed for task 't'"));
     assert!(err.contains("python"));

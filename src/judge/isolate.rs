@@ -106,7 +106,7 @@ impl IsolateBox {
 
     pub fn exec(
         &self,
-        cmd: &[String],
+        cmd: &[&str],
         limits: &Limits,
         stdin: Option<File>,
         stdout: Option<&str>,

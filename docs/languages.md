@@ -1,145 +1,74 @@
 # Language Architecture & Extension Guide
 
-This document describes the polymorphic adapter architecture for programming languages in **Judge Ma Di** ([`src/judge/languages/`](../src/judge/languages/)), including trait contracts, default method behavior, and step-by-step guides for adding new execution adapters.
+A language in **Judge Ma Di** is a plain value, not a trait: a `Language` describes how to build a submission and what to run ([`src/judge/languages/mod.rs`](../src/judge/languages/mod.rs)). Adding one is one table entry.
 
 ---
 
-## 1. The `Language` Trait Contract
+## 1. The `Language` Value
 
-All programming languages implement the `Language` trait defined in [`src/judge/languages/mod.rs`](../src/judge/languages/mod.rs).
+```rust
+pub struct Compile {
+    pub cmd: &'static [&'static str], // run in the compile sandbox
+    pub artifact: &'static str,       // file it produces, copied to the run sandbox
+}
 
-Rust default method implementations eliminate boilerplate—**adapters only implement what differs from the defaults**:
+pub struct Language {
+    pub name: &'static str,           // key stored in `submission.language`
+    pub source_file: &'static str,    // filename the code is written to
+    pub compile: Option<Compile>,     // None = nothing to build
+    pub run: &'static [&'static str], // command run in the run sandbox
+}
+```
 
-| Method | Default | Description |
-| :--- | :--- | :--- |
-| `name(&self)` | *Required* | Language identifier string (e.g., `"cpp"`, `"python"`). |
-| `ext(&self)` | *Required* | Source file extension without leading dot (e.g., `"cpp"`, `"py"`). |
-| `source_filename(&self)` | `source.<ext>` | Exact source code filename created in sandbox (e.g., `Main.java`, `main.go`). |
-| `compiler(&self)` | `None` | Path to compiler binary. If `None`, compile step is skipped. |
-| `compiler_flags(&self)` | `&[]` | Compiler arguments (e.g., `&["--std=c++17", "-O2"]`). |
-| `compile_command(&self)` | Auto-derived | Constructs `<compiler> <flags...> <source_filename> -o <artifact>`. |
-| `compiled_artifact(&self)` | `"source"` if compiled | Binary name produced by compiler and copied to run sandbox. |
-| `run_command(&self)` | `["./source"]` | Command executed inside the runtime Isolate sandbox. |
-| `custom_checker(&self)` | `None` | Optional custom validator override from `./checker/` (fallback to task manifest). |
+All languages live in the `LANGUAGES` slice; `get_language(name)` looks them up by `name` and returns `BadRequest("Unsupported Language")` otherwise.
+
+If `compile` is set, the compile sandbox runs `cmd`, then `artifact` is copied into the run sandbox. A successful compile that produces no `artifact` is a misconfiguration and surfaces as `Judge Error`. `run` must execute the artifact (or `source_file` when there is no `compile`). The checker always comes from the task manifest.
 
 ---
 
 ## 2. Built-in Languages
 
-| Key | Type | Compiler | Flags | Run Command |
+| Key | Source | Compile | Artifact | Run |
 | :--- | :--- | :--- | :--- | :--- |
-| `cpp` | Compiled | `/usr/bin/g++` | `--std=c++17 -O2` | `./source` |
-| `c` | Compiled | `/usr/bin/gcc` | `--std=c11 -O2` | `./source` |
-| `python` | Interpreted | `/usr/bin/python3` (compileall) | `-m compileall -b` | `/usr/bin/python3 source.py` |
+| `cpp` | `source.cpp` | `/usr/bin/g++ --std=c++17 -O2 source.cpp -o source` | `source` | `./source` |
+| `c` | `source.c` | `/usr/bin/gcc --std=c11 -O2 source.c -o source` | `source` | `./source` |
+| `python` | `source.py` | `/usr/bin/python3 -m compileall -b -q source.py` | `source.pyc` | `/usr/bin/python3 source.pyc` |
 
 ---
 
-## 3. Adding a New Language (3 Steps)
+## 3. Adding a New Language
 
-### Step 1: Create Adapter (`src/judge/languages/<name>.rs`)
+### Step 1: Add an entry to `LANGUAGES`
 
-#### Pattern A: Standard Compiled Language (e.g., Rust)
-
-Only provide `name`, `ext`, `compiler`, and `compiler_flags`. Compilation, artifacts, and `./source` execution are auto-derived:
+Compiled (e.g., Rust):
 
 ```rust
-use crate::judge::languages::Language;
-
-#[derive(Debug)]
-pub struct Rust;
-
-impl Language for Rust {
-    fn name(&self) -> &'static str { "rust" }
-    fn ext(&self) -> &'static str { "rs" }
-    fn compiler(&self) -> Option<&'static str> { Some("/usr/bin/rustc") }
-    fn compiler_flags(&self) -> &'static [&'static str] { &["-O"] }
-}
+Language {
+    name: "rust",
+    source_file: "source.rs",
+    compile: Some(Compile {
+        cmd: &["/usr/bin/rustc", "-O", "source.rs", "-o", "source"],
+        artifact: "source",
+    }),
+    run: &["./source"],
+},
 ```
 
-#### Pattern B: Interpreted / Script Language (e.g., JavaScript)
-
-No compiler hook needed. Only provide `name`, `ext`, and `run_command`:
+Interpreted (e.g., JavaScript), no build step:
 
 ```rust
-use crate::judge::languages::Language;
-
-#[derive(Debug)]
-pub struct JavaScript;
-
-impl Language for JavaScript {
-    fn name(&self) -> &'static str { "javascript" }
-    fn ext(&self) -> &'static str { "js" }
-    fn run_command(&self) -> Vec<String> {
-        vec!["/usr/bin/node".into(), "source.js".into()]
-    }
-}
+Language {
+    name: "javascript",
+    source_file: "source.js",
+    compile: None,
+    run: &["/usr/bin/node", "source.js"],
+},
 ```
 
-#### Pattern C: Custom Domain Adapter (e.g., SQL)
-
-Override `run_command` and optionally specify `custom_checker` to enforce a specialized validator:
-
-```rust
-use crate::judge::languages::Language;
-
-#[derive(Debug)]
-pub struct Sql;
-
-impl Language for Sql {
-    fn name(&self) -> &'static str { "sql" }
-    fn ext(&self) -> &'static str { "sql" }
-    fn run_command(&self) -> Vec<String> {
-        vec!["/usr/bin/sqlite3".into(), "-init".into(), "source.sql".into()]
-    }
-    fn custom_checker(&self) -> Option<&'static str> {
-        Some("rcmp4")
-    }
-}
-```
-
----
-
-### Step 2: Register in `src/judge/languages/mod.rs`
-
-1. Declare module and export struct:
-   ```rust
-   pub mod rust;
-   pub use rust::Rust;
-   ```
-
-2. Declare static singleton:
-   ```rust
-   pub static RUST: Rust = Rust;
-   ```
-
-3. Add branch to `get_language`:
-   ```rust
-   pub fn get_language(name: &str) -> Result<&'static dyn Language, AppError> {
-       match name {
-           "cpp" => Ok(&CPP),
-           "c" => Ok(&C_LANG),
-           "python" => Ok(&PYTHON),
-           "rust" => Ok(&RUST),
-           _ => Err(AppError::BadRequest("Unsupported Language".to_string())),
-       }
-   }
-   ```
-
----
-
-### Step 3: Toolchain & Verification
+### Step 2: Toolchain & Verification
 
 1. **Install Compiler / CLI**: Add binary to [`Dockerfile`](../Dockerfile) (e.g., `apt-get install -y rustc`).
-2. **Add Unit Test**: In [`tests/judge_languages.rs`](../tests/judge_languages.rs):
-   ```rust
-   #[test]
-   fn rust_adapter_metadata_and_commands() {
-       let rust = get_language("rust").unwrap();
-       assert_eq!(rust.name(), "rust");
-       assert_eq!(rust.ext(), "rs");
-       assert_eq!(rust.run_command(), vec!["./source"]);
-   }
-   ```
+2. **Add Unit Test**: In [`tests/judge_languages.rs`](../tests/judge_languages.rs), assert the new entry's source, compile, artifact and run. The consistency test over `LANGUAGES` (compile `cmd` builds `source_file`, `run` uses `artifact`) covers it automatically.
 3. **Verify**:
    ```bash
    $ cargo test --test judge_languages
@@ -151,53 +80,24 @@ impl Language for Sql {
 
 ### Option A: Change Default Standard for Existing Key
 
-To bump the standard for all `cpp` submissions, edit `compiler_flags` in [`src/judge/languages/cpp.rs`](../src/judge/languages/cpp.rs):
-
-```rust
-// Before (C++17):
-fn compiler_flags(&self) -> &'static [&'static str] {
-    &["--std=c++17", "-O2"]
-}
-
-// After (C++20):
-fn compiler_flags(&self) -> &'static [&'static str] {
-    &["--std=c++20", "-O2"]
-}
-```
+To bump the standard for all `cpp` submissions, edit the `cmd` of the `cpp` entry in [`src/judge/languages/mod.rs`](../src/judge/languages/mod.rs): replace `"--std=c++17"` with `"--std=c++20"`.
 
 Ensure the host/container compiler version supports the standard (e.g., GCC 11+ for C++20, GCC 14+ for C++23).
 
 ### Option B: Support Multiple Versions Concurrently (e.g. `cpp17` alongside `cpp20`)
 
-Define version-specific structs under `src/judge/languages/`:
+Add a second entry with its own `name` and the new flag; both can share `source_file` and `artifact`:
 
 ```rust
-// In src/judge/languages/cpp.rs:
-pub struct Cpp20;
-
-impl Language for Cpp20 {
-    fn name(&self) -> &'static str { "cpp20" }
-    fn ext(&self) -> &'static str { "cpp" }
-    fn compiler(&self) -> Option<&'static str> { Some("/usr/bin/g++") }
-    fn compiler_flags(&self) -> &'static [&'static str] { &["--std=c++20", "-O2"] }
-}
-```
-
-Register both in [`src/judge/languages/mod.rs`](../src/judge/languages/mod.rs):
-
-```rust
-pub static CPP: Cpp = Cpp;       // default "cpp" (C++17)
-pub static CPP20: Cpp20 = Cpp20; // "cpp20" (C++20)
-
-pub fn get_language(name: &str) -> Result<&'static dyn Language, AppError> {
-    match name {
-        "cpp" | "cpp17" => Ok(&CPP),
-        "cpp20" => Ok(&CPP20),
-        "c" => Ok(&C_LANG),
-        "python" => Ok(&PYTHON),
-        _ => Err(AppError::BadRequest("Unsupported Language".to_string())),
-    }
-}
+Language {
+    name: "cpp20",
+    source_file: "source.cpp",
+    compile: Some(Compile {
+        cmd: &["/usr/bin/g++", "--std=c++20", "-O2", "source.cpp", "-o", "source"],
+        artifact: "source",
+    }),
+    run: &["./source"],
+},
 ```
 
 ### When `Dockerfile` Updates Are Required
@@ -212,15 +112,10 @@ Changing Rust code alone is not enough if the container's installed toolchain do
          g++-13 \
          ...
      ```
-   * Update adapter `compiler()` to match the installed binary:
-     ```rust
-     fn compiler(&self) -> Option<&'static str> {
-         Some("/usr/bin/g++-13")
-     }
-     ```
+   * Point the entry's `compile.cmd` at the installed binary (e.g., `"/usr/bin/g++-13"`).
 
 2. **Newer Runtimes (e.g., Python 3.12+, Node.js 20+)**:
-   If upgrading interpreter versions, install the target version in [`Dockerfile`](../Dockerfile) and point `run_command()` to the corresponding path (e.g., `/usr/bin/python3.12`).
+   If upgrading interpreter versions, install the target version in [`Dockerfile`](../Dockerfile) and point `run` (and `compile.cmd`) to the corresponding path (e.g., `/usr/bin/python3.12`).
 
 3. **Rebuild Image**:
    Whenever `Dockerfile` package dependencies change:

@@ -51,16 +51,13 @@ fn manifest_json(checker: &str, num_testcases: u64, subtasks: &str) -> String {
 #[test]
 fn finds_known_languages() {
     let cpp = get_language("cpp").unwrap();
-    assert_eq!(cpp.name(), "cpp");
-    assert_eq!(cpp.ext(), "cpp");
+    assert_eq!(cpp.name, "cpp");
 
     let c = get_language("c").unwrap();
-    assert_eq!(c.name(), "c");
-    assert_eq!(c.ext(), "c");
+    assert_eq!(c.name, "c");
 
     let py = get_language("python").unwrap();
-    assert_eq!(py.name(), "python");
-    assert_eq!(py.ext(), "py");
+    assert_eq!(py.name, "python");
 }
 
 #[test]

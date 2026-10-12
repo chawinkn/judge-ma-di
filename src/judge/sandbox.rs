@@ -19,13 +19,13 @@ pub trait Sandbox {
 pub struct IsolateSandbox<'a> {
     box_id: u64,
     run_box: Option<IsolateBox>,
-    language: &'static dyn Language,
+    language: &'static Language,
     task: &'a Task,
     code: String,
 }
 
 impl<'a> IsolateSandbox<'a> {
-    pub fn new(box_id: u64, task: &'a Task, language: &'static dyn Language, code: String) -> Self {
+    pub fn new(box_id: u64, task: &'a Task, language: &'static Language, code: String) -> Self {
         Self {
             box_id,
             run_box: None,
@@ -45,14 +45,14 @@ impl<'a> IsolateSandbox<'a> {
 impl Sandbox for IsolateSandbox<'_> {
     fn compile(&mut self) -> Result<bool> {
         let run_box = IsolateBox::open(self.box_id)?;
-        run_box.write(&self.language.source_filename(), &self.code)?;
+        run_box.write(self.language.source_file, &self.code)?;
 
-        if let Some(compile_command) = self.language.compile_command() {
+        if let Some(compile) = &self.language.compile {
             let compile_box = IsolateBox::open(self.box_id + 500)?;
-            compile_box.write(&self.language.source_filename(), &self.code)?;
+            compile_box.write(self.language.source_file, &self.code)?;
 
             let result = compile_box.exec(
-                &compile_command,
+                compile.cmd,
                 &Limits::compile(),
                 None,
                 None,
@@ -62,12 +62,13 @@ impl Sandbox for IsolateSandbox<'_> {
                 return Ok(false);
             }
 
-            if let Some(artifact) = self.language.compiled_artifact() {
-                let compiled_bin = compile_box.path().join(artifact);
-                if compiled_bin.exists() {
-                    fs::copy(&compiled_bin, run_box.path().join(artifact))?;
-                }
-            }
+            let built = compile_box.path().join(compile.artifact);
+            anyhow::ensure!(
+                built.exists(),
+                "compile succeeded but produced no '{}'",
+                compile.artifact
+            );
+            fs::copy(&built, run_box.path().join(compile.artifact))?;
         }
 
         self.run_box = Some(run_box);
@@ -79,7 +80,7 @@ impl Sandbox for IsolateSandbox<'_> {
         let limits = Limits::run(manifest.time_limit, manifest.memory_limit * 1024);
         let (input, _) = self.task.testcase(test_index);
         self.run_box()?.exec(
-            &self.language.run_command(),
+            self.language.run,
             &limits,
             Some(File::open(input)?),
             Some("out.out"),
@@ -88,10 +89,7 @@ impl Sandbox for IsolateSandbox<'_> {
     }
 
     fn check(&mut self, test_index: u64) -> Result<bool> {
-        let checker = self
-            .language
-            .custom_checker()
-            .unwrap_or(&self.task.manifest().checker);
+        let checker = &self.task.manifest().checker;
         let (input, answer) = self.task.testcase(test_index);
         check_output(
             checker,
