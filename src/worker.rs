@@ -7,14 +7,7 @@ use tokio::time::sleep;
 use tracing::{debug, error, info};
 
 use crate::judge::runner::run;
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct PolledSubmission {
-    pub submission_id: u64,
-    pub task_id: String,
-    pub code: Vec<u8>,
-    pub language: String,
-}
+use crate::queue::{self, Claimed};
 
 pub async fn run_worker(pool: Pool) -> Result<()> {
     info!("Polling for queued submissions");
@@ -35,9 +28,9 @@ pub async fn run_worker(pool: Pool) -> Result<()> {
             }
         };
 
-        match poll_next_submission(&db_client).await {
-            Ok(Some(polled)) => {
-                if let Err(err) = judge_and_writeback(&db_client, polled).await {
+        match queue::claim(&db_client).await {
+            Ok(Some(claimed)) => {
+                if let Err(err) = judge_and_writeback(&db_client, claimed).await {
                     error!(error = %err, "Failed to judge or write back submission");
                 }
             }
@@ -50,34 +43,6 @@ pub async fn run_worker(pool: Pool) -> Result<()> {
             }
         }
     }
-}
-
-// TODO: crash mid-judge leaves row stuck at 'Judging' forever. Need
-// updated_at column + reclaim query.
-pub async fn poll_next_submission(db_client: &Client) -> Result<Option<PolledSubmission>> {
-    let row = db_client
-        .query_opt(
-            "
-            UPDATE submission SET status = 'Judging'
-            WHERE id = (
-                SELECT id FROM submission
-                WHERE status = 'In Queue'
-                ORDER BY submitted_at ASC, id ASC
-                LIMIT 1
-                FOR UPDATE SKIP LOCKED
-            )
-            RETURNING id, task_id, code, language
-            ",
-            &[],
-        )
-        .await?;
-
-    Ok(row.map(|row| PolledSubmission {
-        submission_id: row.get::<_, i32>("id") as u64,
-        task_id: row.get("task_id"),
-        code: row.get("code"),
-        language: row.get("language"),
-    }))
 }
 
 const MAX_DECOMPRESSED_SOURCE: u64 = 10 * 1024 * 1024; // 10 MB
@@ -107,14 +72,13 @@ pub fn decode_source_code(compressed: &[u8]) -> Result<String> {
     }
 }
 
-/// Shared writeback path so success/failure/decode-failure can't drift apart.
-async fn judge_and_writeback(db_client: &Client, polled: PolledSubmission) -> Result<()> {
-    let PolledSubmission {
+async fn judge_and_writeback(db_client: &Client, claimed: Claimed) -> Result<()> {
+    let Claimed {
         submission_id,
         task_id,
         code,
         language,
-    } = polled;
+    } = claimed;
 
     info!(
         submission_id,
@@ -138,23 +102,12 @@ async fn judge_and_writeback(db_client: &Client, polled: PolledSubmission) -> Re
                 status = %judge_result.status,
                 "Finished"
             );
-            let result_json = serde_json::to_value(&judge_result.result).unwrap();
             debug!(
                 submission_id,
                 result = ?judge_result.result,
                 "Detailed testcase results"
             );
-            db_client.query_opt(
-                     "UPDATE submission SET status = $1, score = $2, time = $3, memory = $4, result = $5 WHERE id = $6 AND status = 'Judging'",
-                     &[
-                         &judge_result.status.to_string(),
-                         &(judge_result.score as i32),
-                         &(judge_result.time as i32),
-                        &(judge_result.memory as i32),
-                        &result_json,
-                        &(submission_id as i32),
-                     ]
-                 ).await?;
+            queue::complete(db_client, submission_id, &judge_result).await
         }
         Err(err) => {
             error!(
@@ -163,14 +116,7 @@ async fn judge_and_writeback(db_client: &Client, polled: PolledSubmission) -> Re
                 error = %err,
                 "Submission judge error"
             );
-            db_client
-                .query_opt(
-                    "UPDATE submission SET status = 'Judge Error' WHERE id = $1 AND status = 'Judging'",
-                    &[&(submission_id as i32)],
-                )
-                .await?;
+            queue::fail(db_client, submission_id).await
         }
     }
-
-    Ok(())
 }
