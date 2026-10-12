@@ -1,6 +1,7 @@
 use deadpool_postgres::{Manager, Pool};
-use judge_ma_di::worker::{decode_source_code, poll_next_submission};
-use serde_json::json;
+use judge_ma_di::judge::runner::JudgeResult;
+use judge_ma_di::queue;
+use judge_ma_di::worker::decode_source_code;
 use std::io::Write;
 use std::str::FromStr;
 use tokio_postgres::NoTls;
@@ -53,32 +54,25 @@ async fn test_db_queue_lifecycle_atomic_claim_and_writeback() {
         .get("id");
 
     // 2. Poll: verifies FIFO and atomic transition to 'Judging'
-    let p1 = poll_next_submission(&client).await.unwrap().unwrap();
+    let p1 = queue::claim(&client).await.unwrap().unwrap();
     assert_eq!(p1.submission_id, id1 as u64);
     assert_eq!(
         decode_source_code(&p1.code).unwrap(),
         "int main() { return 0; }"
     );
 
-    let p2 = poll_next_submission(&client).await.unwrap().unwrap();
+    let p2 = queue::claim(&client).await.unwrap().unwrap();
     assert_eq!(p2.submission_id, id2 as u64);
 
     // 3. Writeback results & verify
-    let res = json!([{"test_index": 1, "status": "Accepted", "score": 100}]);
-    client
-        .execute(
-            "UPDATE submission SET status = 'Completed', score = 100, result = $1 WHERE id = $2",
-            &[&res, &id1],
-        )
+    let result = JudgeResult {
+        score: 100,
+        ..Default::default()
+    };
+    queue::complete(&client, p1.submission_id, &result)
         .await
         .unwrap();
-    client
-        .execute(
-            "UPDATE submission SET status = 'Judge Error' WHERE id = $1",
-            &[&id2],
-        )
-        .await
-        .unwrap();
+    queue::fail(&client, p2.submission_id).await.unwrap();
 
     let r1 = client
         .query_one(

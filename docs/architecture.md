@@ -59,7 +59,7 @@ sequenceDiagram
     alt Queue is empty
         DB-->>W: None (sleep 1s)
     else Submission claimed
-        DB-->>W: PolledSubmission { id, task_id, code, language }
+        DB-->>W: Claimed { id, task_id, code, language }
         Note over W: Log: "Start" { id, task_id }
         
         alt Decode failure or unrecoverable system error
