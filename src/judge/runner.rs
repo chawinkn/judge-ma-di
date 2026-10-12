@@ -2,13 +2,13 @@ use anyhow::Result;
 use std::{
     fmt,
     fs::{self, File},
-    path::{Path, PathBuf},
+    path::Path,
     process::Command,
 };
 
-use crate::judge::config::{get_task_config, validate_checker, Subtask};
 use crate::judge::isolate::{IsolateBox, IsolateResult, Limits, RunVerdict, Sandbox};
 use crate::judge::languages::{get_language, Language};
+use crate::judge::task::{validate_checker, Subtask, Task};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -69,25 +69,17 @@ pub enum RunStatus {
     Skipped,
 }
 
-pub fn is_testcases_error(task_path: &Path, num_testcases: u64) -> bool {
-    num_testcases == 0
-        || (1..=num_testcases).any(|i| {
-            !task_path.join(format!("{i}.in")).exists()
-                || !task_path.join(format!("{i}.sol")).exists()
-        })
-}
-
-pub struct IsolateSandbox {
+pub struct IsolateSandbox<'a> {
     run_box: IsolateBox,
     limits: Limits,
     language: &'static dyn Language,
-    checker: String,
-    testcases_dir: PathBuf,
+    task: &'a Task,
 }
 
-impl Sandbox for IsolateSandbox {
+impl Sandbox for IsolateSandbox<'_> {
     fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
-        let input = File::open(self.testcases_dir.join(format!("{test_index}.in")))?;
+        let (input, _) = self.task.testcase(test_index);
+        let input = File::open(input)?;
         self.run_box.exec(
             &self.language.run_command(),
             &self.limits,
@@ -98,12 +90,16 @@ impl Sandbox for IsolateSandbox {
     }
 
     fn check(&mut self, test_index: u64) -> Result<bool> {
-        let checker = self.language.custom_checker().unwrap_or(&self.checker);
+        let checker = self
+            .language
+            .custom_checker()
+            .unwrap_or(&self.task.manifest().checker);
+        let (input, answer) = self.task.testcase(test_index);
         check_output(
             checker,
-            &self.testcases_dir.join(format!("{test_index}.in")),
+            &input,
             &self.run_box.path().join("out.out"),
-            &self.testcases_dir.join(format!("{test_index}.sol")),
+            &answer,
         )
     }
 }
@@ -166,21 +162,20 @@ fn compile(
 
 pub fn run(task_id: &str, submission_id: u64, code: String, language: &str) -> Result<JudgeResult> {
     let language_adapter = get_language(language).map_err(anyhow::Error::from)?;
-    let task_config = get_task_config(task_id).map_err(anyhow::Error::from)?;
+    let task = Task::open(task_id).map_err(anyhow::Error::from)?;
+    let manifest = task.manifest();
 
-    if !task_config.allowed_languages.is_empty()
-        && !task_config.allowed_languages.iter().any(|l| l == language)
+    if !manifest.allowed_languages.is_empty()
+        && !manifest.allowed_languages.iter().any(|l| l == language)
     {
         return Err(crate::error::AppError::BadRequest(format!(
             "Language '{language}' is not allowed for task '{task_id}'. Allowed languages: {}",
-            task_config.allowed_languages.join(", ")
+            manifest.allowed_languages.join(", ")
         ))
         .into());
     }
 
-    let testcases_dir = PathBuf::from(format!("tasks/{task_id}/testcases"));
-
-    if is_testcases_error(&testcases_dir, task_config.num_testcases) {
+    if !task.has_all_testcases() {
         let judge_result = JudgeResult {
             status: JudgeStatus::TestcasesError,
             ..Default::default()
@@ -204,23 +199,15 @@ pub fn run(task_id: &str, submission_id: u64, code: String, language: &str) -> R
 
     let mut sandbox = IsolateSandbox {
         run_box,
-        limits: Limits::run(task_config.time_limit, task_config.memory_limit * 1000),
+        limits: Limits::run(manifest.time_limit, manifest.memory_limit * 1000),
         language: language_adapter,
-        checker: task_config.checker,
-        testcases_dir,
+        task: &task,
     };
 
-    let subtasks = task_config.subtasks;
-    let use_skip = task_config.skip;
-
-    let judge_result = if subtasks.is_empty() {
-        run_normal(
-            &mut sandbox,
-            task_config.full_score,
-            task_config.num_testcases,
-        )
+    let judge_result = if manifest.subtasks.is_empty() {
+        run_normal(&mut sandbox, manifest.full_score, manifest.num_testcases)
     } else {
-        run_subtask(&mut sandbox, subtasks, use_skip)
+        run_subtask(&mut sandbox, manifest.subtasks.clone(), manifest.skip)
     }?;
 
     Ok(judge_result)

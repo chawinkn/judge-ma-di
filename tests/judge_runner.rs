@@ -1,4 +1,4 @@
-use judge_ma_di::judge::runner::{check_output, is_testcases_error, run, JudgeStatus};
+use judge_ma_di::judge::runner::{check_output, run, JudgeStatus};
 use std::path::Path;
 
 // tasks/_test_missing_testcases has a manifest.json but no testcases/ dir,
@@ -38,35 +38,6 @@ fn errors_on_nonexistent_task() {
     );
 
     assert!(result.is_err());
-}
-
-#[test]
-fn testcases_validation_passes_when_all_pairs_exist() {
-    assert!(!is_testcases_error(
-        Path::new("tasks/a_plus_b/testcases"),
-        2
-    ));
-}
-
-#[test]
-fn testcases_validation_fails_when_testcases_dir_missing() {
-    assert!(is_testcases_error(
-        Path::new("tasks/_test_missing_testcases/testcases"),
-        1
-    ));
-}
-
-#[test]
-fn testcases_validation_fails_when_testcase_count_insufficient() {
-    assert!(is_testcases_error(
-        Path::new("tasks/a_plus_b/testcases"),
-        99
-    ));
-}
-
-#[test]
-fn testcases_validation_fails_when_testcase_count_is_zero() {
-    assert!(is_testcases_error(Path::new("tasks/a_plus_b/testcases"), 0));
 }
 
 #[test]
