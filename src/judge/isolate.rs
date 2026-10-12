@@ -6,10 +6,11 @@ use std::{
     process::Command,
 };
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RunVerdict {
     #[serde(rename = "Compilation Error")]
     CompilationError,
+    #[default]
     #[serde(rename = "Accepted")]
     VerdictOK,
     #[serde(rename = "Time Limit Exceeded")]
@@ -22,12 +23,6 @@ pub enum RunVerdict {
     VerdictXX,
     #[serde(rename = "Signal Error")]
     VerdictSG,
-}
-
-impl Default for RunVerdict {
-    fn default() -> Self {
-        Self::VerdictOK
-    }
 }
 
 #[derive(Default, PartialEq, Debug)]
@@ -43,7 +38,6 @@ pub struct Limits {
     pub wall_time: f64,
     pub extra_time: f64,
     pub memory_kb: u64,
-    pub processes: u32,
     pub fsize_kb: u64,
 }
 
@@ -54,7 +48,6 @@ impl Limits {
             wall_time: 15.0,
             extra_time: 1.0,
             memory_kb: 1_048_576,
-            processes: 128,
             fsize_kb: 262_144,
         }
     }
@@ -65,7 +58,6 @@ impl Limits {
             wall_time: time + 5.0,
             extra_time: time + 1.0,
             memory_kb,
-            processes: 128,
             fsize_kb: 65_536,
         }
     }
@@ -118,7 +110,7 @@ impl IsolateBox {
             .arg(format!("--wall-time={}", limits.wall_time))
             .arg(format!("--extra-time={}", limits.extra_time))
             .arg(format!("--cg-mem={}", limits.memory_kb))
-            .arg(format!("--processes={}", limits.processes))
+            .arg("--processes=128")
             .arg(format!("--fsize={}", limits.fsize_kb))
             .arg(format!("--meta={}", self.meta_path.display()));
         if let Some(stdin) = stdin {
