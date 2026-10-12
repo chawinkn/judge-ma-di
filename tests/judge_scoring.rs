@@ -1,6 +1,6 @@
-use judge_ma_di::judge::config::Subtask;
 use judge_ma_di::judge::isolate::{IsolateResult, RunVerdict, Sandbox};
 use judge_ma_di::judge::runner::{run_each, run_normal, run_subtask, RunStatus};
+use judge_ma_di::judge::task::Subtask;
 use std::collections::VecDeque;
 
 // Scripted sandbox: run()/check() results are consumed in order, and panic

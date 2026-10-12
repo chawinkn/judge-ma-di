@@ -230,7 +230,7 @@ curl -X POST http://localhost:5000/api/tasks/a_plus_b \
   -F "testcases.zip=@tasks/a_plus_b/testcases.zip"
 ```
 
-The API validates the task ID (`^[a-zA-Z0-9_-]+$`), sanitizes multipart filenames against path traversal, validates `manifest.json` (requiring `num_testcases > 0` and checkers in `ALLOWED_CHECKERS`), and safely extracts `testcases.zip` into `tasks/a_plus_b/testcases/` (enforcing limits of max 1,000 files, max 256 MB uncompressed, and strict entry path containment).
+The API validates the task ID (`^[a-zA-Z0-9_-]+$`), sanitizes multipart filenames against path traversal, validates `manifest.json` (requiring checkers in `ALLOWED_CHECKERS` and `num_testcases > 0` for the task, or for every subtask when `subtasks` is non-empty), and safely extracts `testcases.zip` into `tasks/a_plus_b/testcases/` (enforcing limits of max 1,000 files, max 256 MB uncompressed, and strict entry path containment).
 
 ### Method B: Via Database Registration
 

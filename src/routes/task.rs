@@ -8,7 +8,7 @@ use axum::{
 use std::io::{Cursor, Read};
 
 use crate::error::{json_response, AppError, ResponseCode};
-use crate::judge::config::{get_task_config, validate_checker, TaskConfig};
+use crate::judge::task::{task_dir, Manifest, Task};
 
 const MAX_ZIP_TOTAL_SIZE: u64 = 256 * 1024 * 1024; // 256 MB
 const MAX_ZIP_FILES: usize = 1000;
@@ -68,13 +68,10 @@ pub fn safe_extract_zip(data: &[u8], target: &std::path::Path) -> Result<(), App
     res
 }
 
-pub use crate::judge::config::validate_task_id;
-
 pub async fn get_task_testcases(
     Path(task_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    validate_task_id(&task_id)?;
-    let contents = tokio::fs::read(format!("tasks/{task_id}/testcases.zip"))
+    let contents = tokio::fs::read(task_dir(&task_id)?.join("testcases.zip"))
         .await
         .map_err(|_| AppError::NotFound(format!("Testcases for task '{task_id}' not found")))?;
 
@@ -95,8 +92,7 @@ pub async fn upload_task(
     Path(task_id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, AppError> {
-    validate_task_id(&task_id)?;
-    let dir = format!("tasks/{task_id}");
+    let dir = task_dir(&task_id)?;
     tokio::fs::create_dir_all(&dir).await?;
 
     while let Some(field) = multipart
@@ -118,30 +114,14 @@ pub async fn upload_task(
             .map_err(|e| AppError::BadRequest(e.to_string()))?;
 
         if safe_name == "manifest.json" {
-            let manifest: TaskConfig = serde_json::from_slice(&data)
-                .map_err(|e| AppError::BadRequest(format!("Invalid manifest.json: {e}")))?;
-            validate_checker(&manifest.checker)?;
-            if manifest.num_testcases == 0 {
-                return Err(AppError::BadRequest(
-                    "num_testcases must be greater than 0".to_string(),
-                ));
-            }
-            for (i, subtask) in manifest.subtasks.iter().enumerate() {
-                if subtask.num_testcases == 0 {
-                    return Err(AppError::BadRequest(format!(
-                        "subtask {} num_testcases must be greater than 0",
-                        i + 1
-                    )));
-                }
-            }
+            Manifest::parse(&data)?;
         }
 
-        tokio::fs::write(format!("{dir}/{safe_name}"), &data).await?;
+        tokio::fs::write(dir.join(&safe_name), &data).await?;
 
         if safe_name.ends_with(".zip") {
-            let target = format!("{dir}/testcases");
-            let _ = tokio::fs::remove_dir_all(&target).await;
-            let target_path = std::path::PathBuf::from(target);
+            let target_path = dir.join("testcases");
+            let _ = tokio::fs::remove_dir_all(&target_path).await;
             let zip_data = data.clone();
             tokio::task::spawn_blocking(move || safe_extract_zip(&zip_data, &target_path))
                 .await
@@ -156,8 +136,7 @@ pub async fn upload_task(
 
 // TODO: Auth
 pub async fn delete_task(Path(task_id): Path<String>) -> Result<impl IntoResponse, AppError> {
-    validate_task_id(&task_id)?;
-    tokio::fs::remove_dir_all(format!("tasks/{task_id}"))
+    tokio::fs::remove_dir_all(task_dir(&task_id)?)
         .await
         .map_err(|e| match e.kind() {
             std::io::ErrorKind::NotFound => {
@@ -169,14 +148,12 @@ pub async fn delete_task(Path(task_id): Path<String>) -> Result<impl IntoRespons
 }
 
 pub async fn get_manifest(Path(task_id): Path<String>) -> Result<impl IntoResponse, AppError> {
-    validate_task_id(&task_id)?;
-    let task_config = get_task_config(&task_id)?;
-    Ok((StatusCode::OK, Json(task_config)))
+    let task = Task::open(&task_id)?;
+    Ok((StatusCode::OK, Json(task.into_manifest())))
 }
 
 pub async fn get_desc(Path(task_id): Path<String>) -> Result<impl IntoResponse, AppError> {
-    validate_task_id(&task_id)?;
-    let contents = tokio::fs::read(format!("tasks/{task_id}/desc.pdf"))
+    let contents = tokio::fs::read(task_dir(&task_id)?.join("desc.pdf"))
         .await
         .map_err(|_| AppError::NotFound(format!("Description for task '{task_id}' not found")))?;
 
