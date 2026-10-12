@@ -1,12 +1,14 @@
 use anyhow::Result;
 use std::{
     fmt,
+    fs::{self, File},
     path::{Path, PathBuf},
+    process::Command,
 };
 
-use crate::judge::config::{get_task_config, Subtask};
-use crate::judge::isolate::{Isolate, RunVerdict, Sandbox};
-use crate::judge::languages::get_language;
+use crate::judge::config::{get_task_config, validate_checker, Subtask};
+use crate::judge::isolate::{IsolateBox, IsolateResult, Limits, RunVerdict, Sandbox};
+use crate::judge::languages::{get_language, Language};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -75,6 +77,93 @@ pub fn is_testcases_error(task_path: &Path, num_testcases: u64) -> bool {
         })
 }
 
+pub struct IsolateSandbox {
+    run_box: IsolateBox,
+    limits: Limits,
+    language: &'static dyn Language,
+    checker: String,
+    testcases_dir: PathBuf,
+}
+
+impl Sandbox for IsolateSandbox {
+    fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
+        let input = File::open(self.testcases_dir.join(format!("{test_index}.in")))?;
+        self.run_box.exec(
+            &self.language.run_command(),
+            &self.limits,
+            Some(input),
+            Some("out.out"),
+            &[],
+        )
+    }
+
+    fn check(&mut self, test_index: u64) -> Result<bool> {
+        let checker = self.language.custom_checker().unwrap_or(&self.checker);
+        check_output(
+            checker,
+            &self.testcases_dir.join(format!("{test_index}.in")),
+            &self.run_box.path().join("out.out"),
+            &self.testcases_dir.join(format!("{test_index}.sol")),
+        )
+    }
+}
+
+pub fn check_output(checker: &str, input: &Path, output: &Path, answer: &Path) -> Result<bool> {
+    validate_checker(checker).map_err(anyhow::Error::msg)?;
+
+    let result = Command::new("timeout")
+        .arg("10")
+        .arg(format!("checker/{checker}"))
+        .arg(input)
+        .arg(output)
+        .arg(answer)
+        .output()?;
+
+    anyhow::ensure!(
+        result.status.code() != Some(124),
+        "Checker execution timed out after 10 seconds"
+    );
+
+    Ok(result.stdout.starts_with(b"Correct\n100")
+        || (!result.stdout.starts_with(b"Incorrect")
+            && result.status.success()
+            && result.stdout.is_empty()))
+}
+
+fn compile(
+    run_box: &IsolateBox,
+    compile_box_id: u64,
+    language: &dyn Language,
+    code: &str,
+) -> Result<bool> {
+    let Some(compile_command) = language.compile_command() else {
+        return Ok(true);
+    };
+
+    let compile_box = IsolateBox::open(compile_box_id)?;
+    compile_box.write(&language.source_filename(), code)?;
+
+    let result = compile_box.exec(
+        &compile_command,
+        &Limits::compile(),
+        None,
+        None,
+        &["PATH=/usr/bin:/bin"],
+    )?;
+    if result.status != RunVerdict::VerdictOK {
+        return Ok(false);
+    }
+
+    if let Some(artifact) = language.compiled_artifact() {
+        let compiled_bin = compile_box.path().join(artifact);
+        if compiled_bin.exists() {
+            fs::copy(&compiled_bin, run_box.path().join(artifact))?;
+        }
+    }
+
+    Ok(true)
+}
+
 pub fn run(task_id: &str, submission_id: u64, code: String, language: &str) -> Result<JudgeResult> {
     let language_adapter = get_language(language).map_err(anyhow::Error::from)?;
     let task_config = get_task_config(task_id).map_err(anyhow::Error::from)?;
@@ -100,22 +189,11 @@ pub fn run(task_id: &str, submission_id: u64, code: String, language: &str) -> R
         return Ok(judge_result);
     }
 
-    let mut isolate = Isolate {
-        box_path: PathBuf::new(),
-        box_id: submission_id % 500,
-        time_limit: task_config.time_limit,
-        memory_limit: task_config.memory_limit * 1000,
-        code,
-        language: language_adapter,
-        checker: task_config.checker,
-        testcases_dir,
-        initialized: false,
-    };
+    let box_id = submission_id % 500;
+    let run_box = IsolateBox::open(box_id)?;
+    run_box.write(&language_adapter.source_filename(), &code)?;
 
-    isolate.init()?;
-    let compile_result = isolate.compile()?;
-
-    if compile_result.status == RunVerdict::CompilationError {
+    if !compile(&run_box, box_id + 500, language_adapter, &code)? {
         let judge_result = JudgeResult {
             status: JudgeStatus::CompilationError,
             ..Default::default()
@@ -124,17 +202,25 @@ pub fn run(task_id: &str, submission_id: u64, code: String, language: &str) -> R
         return Ok(judge_result);
     }
 
+    let mut sandbox = IsolateSandbox {
+        run_box,
+        limits: Limits::run(task_config.time_limit, task_config.memory_limit * 1000),
+        language: language_adapter,
+        checker: task_config.checker,
+        testcases_dir,
+    };
+
     let subtasks = task_config.subtasks;
     let use_skip = task_config.skip;
 
     let judge_result = if subtasks.is_empty() {
         run_normal(
-            &mut isolate,
+            &mut sandbox,
             task_config.full_score,
             task_config.num_testcases,
         )
     } else {
-        run_subtask(&mut isolate, subtasks, use_skip)
+        run_subtask(&mut sandbox, subtasks, use_skip)
     }?;
 
     Ok(judge_result)
