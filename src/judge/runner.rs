@@ -1,14 +1,10 @@
 use anyhow::Result;
-use std::{
-    fmt,
-    fs::{self, File},
-    path::Path,
-    process::Command,
-};
+use std::fmt;
 
-use crate::judge::isolate::{IsolateBox, IsolateResult, Limits, RunVerdict, Sandbox};
+use crate::judge::isolate::RunVerdict;
 use crate::judge::languages::{get_language, Language};
-use crate::judge::task::{validate_checker, Subtask, Task};
+use crate::judge::sandbox::{IsolateSandbox, Sandbox};
+use crate::judge::task::{Subtask, Task};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -28,6 +24,13 @@ pub struct JudgeResult {
     pub score: u64,
     pub time: u64,
     pub memory: u64,
+}
+
+impl JudgeResult {
+    fn absorb(&mut self, run: &RunResult) {
+        self.memory = self.memory.max(run.memory);
+        self.time = self.time.max((run.time * 1000.0) as u64);
+    }
 }
 
 impl Default for JudgeResult {
@@ -69,151 +72,57 @@ pub enum RunStatus {
     Skipped,
 }
 
-pub struct IsolateSandbox<'a> {
-    run_box: IsolateBox,
-    limits: Limits,
-    language: &'static dyn Language,
-    task: &'a Task,
-}
-
-impl Sandbox for IsolateSandbox<'_> {
-    fn run(&mut self, test_index: u64) -> Result<IsolateResult> {
-        let (input, _) = self.task.testcase(test_index);
-        let input = File::open(input)?;
-        self.run_box.exec(
-            &self.language.run_command(),
-            &self.limits,
-            Some(input),
-            Some("out.out"),
-            &[],
-        )
-    }
-
-    fn check(&mut self, test_index: u64) -> Result<bool> {
-        let checker = self
-            .language
-            .custom_checker()
-            .unwrap_or(&self.task.manifest().checker);
-        let (input, answer) = self.task.testcase(test_index);
-        check_output(
-            checker,
-            &input,
-            &self.run_box.path().join("out.out"),
-            &answer,
-        )
-    }
-}
-
-pub fn check_output(checker: &str, input: &Path, output: &Path, answer: &Path) -> Result<bool> {
-    validate_checker(checker).map_err(anyhow::Error::msg)?;
-
-    let result = Command::new("timeout")
-        .arg("10")
-        .arg(format!("checker/{checker}"))
-        .arg(input)
-        .arg(output)
-        .arg(answer)
-        .output()?;
-
-    anyhow::ensure!(
-        result.status.code() != Some(124),
-        "Checker execution timed out after 10 seconds"
-    );
-
-    Ok(result.stdout.starts_with(b"Correct\n100")
-        || (!result.stdout.starts_with(b"Incorrect")
-            && result.status.success()
-            && result.stdout.is_empty()))
-}
-
-fn compile(
-    run_box: &IsolateBox,
-    compile_box_id: u64,
-    language: &dyn Language,
-    code: &str,
-) -> Result<bool> {
-    let Some(compile_command) = language.compile_command() else {
-        return Ok(true);
-    };
-
-    let compile_box = IsolateBox::open(compile_box_id)?;
-    compile_box.write(&language.source_filename(), code)?;
-
-    let result = compile_box.exec(
-        &compile_command,
-        &Limits::compile(),
-        None,
-        None,
-        &["PATH=/usr/bin:/bin"],
-    )?;
-    if result.status != RunVerdict::VerdictOK {
-        return Ok(false);
-    }
-
-    if let Some(artifact) = language.compiled_artifact() {
-        let compiled_bin = compile_box.path().join(artifact);
-        if compiled_bin.exists() {
-            fs::copy(&compiled_bin, run_box.path().join(artifact))?;
-        }
-    }
-
-    Ok(true)
-}
-
 pub fn run(task_id: &str, submission_id: u64, code: String, language: &str) -> Result<JudgeResult> {
-    let language_adapter = get_language(language).map_err(anyhow::Error::from)?;
+    let language = get_language(language).map_err(anyhow::Error::from)?;
     let task = Task::open(task_id).map_err(anyhow::Error::from)?;
+    let mut sandbox = IsolateSandbox::new(submission_id % 500, &task, language, code);
+    judge(&task, language, &mut sandbox)
+}
+
+pub fn judge(
+    task: &Task,
+    language: &dyn Language,
+    sandbox: &mut impl Sandbox,
+) -> Result<JudgeResult> {
     let manifest = task.manifest();
 
     if !manifest.allowed_languages.is_empty()
-        && !manifest.allowed_languages.iter().any(|l| l == language)
+        && !manifest
+            .allowed_languages
+            .iter()
+            .any(|l| l == language.name())
     {
         return Err(crate::error::AppError::BadRequest(format!(
-            "Language '{language}' is not allowed for task '{task_id}'. Allowed languages: {}",
+            "Language '{}' is not allowed for task '{}'. Allowed languages: {}",
+            language.name(),
+            task.id(),
             manifest.allowed_languages.join(", ")
         ))
         .into());
     }
 
     if !task.has_all_testcases() {
-        let judge_result = JudgeResult {
+        return Ok(JudgeResult {
             status: JudgeStatus::TestcasesError,
             ..Default::default()
-        };
-
-        return Ok(judge_result);
+        });
     }
 
-    let box_id = submission_id % 500;
-    let run_box = IsolateBox::open(box_id)?;
-    run_box.write(&language_adapter.source_filename(), &code)?;
-
-    if !compile(&run_box, box_id + 500, language_adapter, &code)? {
-        let judge_result = JudgeResult {
+    if !sandbox.compile()? {
+        return Ok(JudgeResult {
             status: JudgeStatus::CompilationError,
             ..Default::default()
-        };
-
-        return Ok(judge_result);
+        });
     }
 
-    let mut sandbox = IsolateSandbox {
-        run_box,
-        limits: Limits::run(manifest.time_limit, manifest.memory_limit * 1000),
-        language: language_adapter,
-        task: &task,
-    };
-
-    let judge_result = if manifest.subtasks.is_empty() {
-        run_normal(&mut sandbox, manifest.full_score, manifest.num_testcases)
+    if manifest.subtasks.is_empty() {
+        run_normal(sandbox, manifest.full_score, manifest.num_testcases)
     } else {
-        run_subtask(&mut sandbox, manifest.subtasks.clone(), manifest.skip)
-    }?;
-
-    Ok(judge_result)
+        run_subtask(sandbox, &manifest.subtasks, manifest.skip)
+    }
 }
 
-pub fn run_each<S: Sandbox>(
+fn run_each<S: Sandbox>(
     isolate: &mut S,
     mut score: u64,
     subtask_index: u64,
@@ -247,7 +156,7 @@ pub fn run_each<S: Sandbox>(
     })
 }
 
-pub fn run_normal<S: Sandbox>(
+fn run_normal<S: Sandbox>(
     isolate: &mut S,
     full_score: u64,
     num_testcases: u64,
@@ -266,8 +175,7 @@ pub fn run_normal<S: Sandbox>(
         let run_result = run_each(isolate, score, 0, test_index)?;
 
         judge_result.score += run_result.score;
-        judge_result.memory = judge_result.memory.max(run_result.memory);
-        judge_result.time = judge_result.time.max((run_result.time * 1000.0) as u64);
+        judge_result.absorb(&run_result);
 
         judge_result.result.push(run_result);
     }
@@ -275,9 +183,9 @@ pub fn run_normal<S: Sandbox>(
     Ok(judge_result)
 }
 
-pub fn run_subtask<S: Sandbox>(
+fn run_subtask<S: Sandbox>(
     isolate: &mut S,
-    subtasks: Vec<Subtask>,
+    subtasks: &[Subtask],
     use_skip: bool,
 ) -> Result<JudgeResult> {
     let total_result = subtasks
@@ -291,7 +199,7 @@ pub fn run_subtask<S: Sandbox>(
 
     let mut test_index = 1;
 
-    for (subtask_index, subtask) in (1..).zip(&subtasks) {
+    for (subtask_index, subtask) in (1..).zip(subtasks) {
         if subtask.num_testcases == 0 {
             continue;
         }
@@ -318,8 +226,7 @@ pub fn run_subtask<S: Sandbox>(
                     skipped = true;
                 }
 
-                judge_result.memory = judge_result.memory.max(run_result.memory);
-                judge_result.time = judge_result.time.max((run_result.time * 1000.0) as u64);
+                judge_result.absorb(&run_result);
 
                 subtask_result.push(run_result);
             }

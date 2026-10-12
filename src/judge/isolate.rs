@@ -180,11 +180,3 @@ pub fn parse_meta(meta: &str, memory_limit_kb: u64) -> Result<IsolateResult> {
 
     Ok(result)
 }
-
-/// What `judge::runner`'s scoring logic (run_normal/run_subtask) actually
-/// needs from a sandbox. Lets that logic be tested with a fake instead of
-/// requiring a real isolate CLI + cgroups on the test host.
-pub trait Sandbox {
-    fn run(&mut self, test_index: u64) -> Result<IsolateResult>;
-    fn check(&mut self, test_index: u64) -> Result<bool>;
-}
