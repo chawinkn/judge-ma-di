@@ -17,7 +17,7 @@ pub struct RunResult {
     pub memory: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct JudgeResult {
     pub result: Vec<RunResult>,
     pub status: JudgeStatus,
@@ -33,20 +33,9 @@ impl JudgeResult {
     }
 }
 
-impl Default for JudgeResult {
-    fn default() -> Self {
-        Self {
-            result: Vec::new(),
-            status: JudgeStatus::Completed,
-            score: 0,
-            time: 0,
-            memory: 0,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub enum JudgeStatus {
+    #[default]
     Completed,
     CompilationError,
     TestcasesError,
@@ -157,10 +146,6 @@ fn run_normal<S: Sandbox>(
     full_score: u64,
     num_testcases: u64,
 ) -> Result<JudgeResult> {
-    if num_testcases == 0 {
-        return Ok(JudgeResult::default());
-    }
-
     let mut judge_result = JudgeResult {
         result: Vec::with_capacity(num_testcases as usize),
         ..Default::default()
@@ -196,9 +181,6 @@ fn run_subtask<S: Sandbox>(
     let mut test_index = 1;
 
     for (subtask_index, subtask) in (1..).zip(subtasks) {
-        if subtask.num_testcases == 0 {
-            continue;
-        }
         let mut correct_all = true;
         let mut skipped = false;
         let mut subtask_result = Vec::with_capacity(subtask.num_testcases as usize);
